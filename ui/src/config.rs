@@ -25,6 +25,41 @@ fn find_config_file() -> String {
 static CONFIG: OnceLock<Arc<RwLock<TomlConfig>>> = OnceLock::new();
 static CONFIG_WRITER: OnceLock<std::sync::mpsc::Sender<()>> = OnceLock::new();
 
+pub fn default_config() -> TomlConfig {
+    TomlConfig {
+        version: 1,
+        global: TomlGlobal {
+            dll: None,
+        },
+        game: vec![
+            TomlGame {
+                exe: String::from("vkcube"),
+                multiplier: Multiplier::from(4),
+                flow_scale: FlowScale::from(0.7),
+                performance_mode: true,
+                hdr_mode: false,
+                experimental_present_mode: PresentMode::Vsync,
+            },
+            TomlGame {
+                exe: String::from("benchmark"),
+                multiplier: Multiplier::from(4),
+                flow_scale: FlowScale::from(1.0),
+                performance_mode: true,
+                hdr_mode: false,
+                experimental_present_mode: PresentMode::Vsync,
+            },
+            TomlGame {
+                exe: String::from("Genshin"),
+                multiplier: Multiplier::from(3),
+                flow_scale: FlowScale::from(1.0),
+                performance_mode: false,
+                hdr_mode: false,
+                experimental_present_mode: PresentMode::Vsync,
+            },
+        ]
+    }
+}
+
 ///
 /// Load the configuration from the file and create a writer.
 ///
@@ -32,8 +67,8 @@ pub fn load_config() -> Result<(), anyhow::Error> {
     // load the configuration file
     let path = find_config_file();
     if !std::path::Path::new(&path).exists() {
-        let default_config = TomlConfig::default();
-        save_config(&default_config)
+        let conf = default_config();
+        save_config(&conf)
             .context("Failed to create default configuration")?;
     }
     let data = std::fs::read(path)
