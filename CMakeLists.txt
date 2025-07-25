@@ -1,8 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
 
-set(CMAKE_CXX_COMPILER clang++) # gcc release build crashes
-set(CMAKE_C_COMPILER clang)     # feel free to fix :3
-
 set(CMAKE_SKIP_RPATH ON)
 
 # subprojects
@@ -50,11 +47,6 @@ target_link_libraries(lsfg-vk PRIVATE
 
 get_target_property(TOML11_INCLUDE_DIRS toml11 INTERFACE_INCLUDE_DIRECTORIES)
 target_include_directories(lsfg-vk SYSTEM PRIVATE ${TOML11_INCLUDE_DIRS})
-
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set_target_properties(lsfg-vk PROPERTIES
-        INTERPROCEDURAL_OPTIMIZATION ON)
-endif()
 
 # diagnostics
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
