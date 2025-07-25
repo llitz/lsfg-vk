@@ -6,6 +6,10 @@ fi
 
 set -eux
 
+# set executable bits
+chmod a+x bin/lsfg-vk-ui
+chmod a+x lib/liblsfg-vk.so
+
 # build alpm package
 echo "Building ALPM package..."
 
