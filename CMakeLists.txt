@@ -1,48 +1,79 @@
-cmake_minimum_required(VERSION 3.29)
+cmake_minimum_required(VERSION 3.10)
 
-project(lsfg-vk-base-base
-    VERSION 0.0.1
-    DESCRIPTION "lsfg-vk-base: LSFG on Linux through Vulkan"
-    LANGUAGES CXX)
+set(CMAKE_SKIP_RPATH ON)
 
-# cmake options
+# subprojects
+add_compile_options(-fPIC
+    -Wno-deprecated-declarations
+    -Wno-unused-template)
 
-set(CMAKE_CXX_COMPILER clang++)
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_CLANG_TIDY clang-tidy)
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+add_subdirectory(thirdparty/dxbc EXCLUDE_FROM_ALL)
+add_subdirectory(thirdparty/pe-parse/pe-parser-library EXCLUDE_FROM_ALL)
+add_subdirectory(thirdparty/toml11 EXCLUDE_FROM_ALL)
+add_subdirectory(thirdparty/volk EXCLUDE_FROM_ALL)
+add_subdirectory(framegen)
 
 # main project
+project(lsfg-vk
+    VERSION 0.9.0
+    DESCRIPTION "Lossless Scaling Frame Generation on Linux"
+    LANGUAGES CXX)
 
 file(GLOB SOURCES
-    "src/core/*.cpp"
+    "src/config/*.cpp"
+    "src/extract/*.cpp"
+    "src/mini/*.cpp"
     "src/utils/*.cpp"
     "src/*.cpp"
 )
 
-add_executable(lsfg-vk-base ${SOURCES})
+add_library(lsfg-vk SHARED ${SOURCES})
 
-target_include_directories(lsfg-vk-base
-    PUBLIC include)
-target_link_libraries(lsfg-vk-base
-    PUBLIC vulkan)
-target_compile_options(lsfg-vk-base PRIVATE
-    -Weverything
-    # disable compat c++ flags
-    -Wno-pre-c++20-compat-pedantic
-    -Wno-pre-c++17-compat
-    -Wno-c++98-compat-pedantic
-    -Wno-c++98-compat
-    # disable other flags
-    -Wno-missing-designated-field-initializers
-    -Wno-shadow         # allow shadowing
-    -Wno-switch-enum    # ignore missing cases
-    -Wno-switch-default # ignore missing default
-    -Wno-padded         # ignore automatic padding
-    -Wno-exit-time-destructors # allow globals
-    -Wno-global-constructors
-    # required for vulkan
-    -Wno-cast-function-type-strict
-)
+# target
+set_target_properties(lsfg-vk PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON)
+target_include_directories(lsfg-vk
+    PRIVATE include)
+target_link_libraries(lsfg-vk PRIVATE
+    pe-parse dxbc toml11
+    lsfg-vk-framegen)
+
+get_target_property(TOML11_INCLUDE_DIRS toml11 INTERFACE_INCLUDE_DIRECTORIES)
+target_include_directories(lsfg-vk SYSTEM PRIVATE ${TOML11_INCLUDE_DIRS})
+
+# diagnostics
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set_target_properties(lsfg-vk PROPERTIES
+        EXPORT_COMPILE_COMMANDS ON)
+endif()
+
+if(LSFGVK_EXCESS_DEBUG)
+    message(STATUS "LSFGVK_EXCESS_DEBUG is only compatible with clang")
+    target_compile_options(lsfg-vk PRIVATE
+        -Weverything
+        # disable compat c++ flags
+        -Wno-pre-c++20-compat-pedantic
+        -Wno-pre-c++17-compat
+        -Wno-c++98-compat-pedantic
+        -Wno-c++98-compat
+        # disable other flags
+        -Wno-missing-designated-field-initializers
+        -Wno-shadow         # allow shadowing
+        -Wno-switch-enum    # ignore missing cases
+        -Wno-switch-default # ignore missing default
+        -Wno-padded         # ignore automatic padding
+        -Wno-exit-time-destructors # allow globals
+        -Wno-global-constructors   # allow globals
+        -Wno-cast-function-type-strict # for vulkan
+    )
+
+    set_target_properties(lsfg-vk PROPERTIES
+        CXX_CLANG_TIDY clang-tidy)
+endif()
+
+# install
+install(FILES "${CMAKE_BINARY_DIR}/liblsfg-vk.so"
+    DESTINATION lib)
+install(FILES "${CMAKE_SOURCE_DIR}/VkLayer_LS_frame_generation.json"
+    DESTINATION share/vulkan/implicit_layer.d)
