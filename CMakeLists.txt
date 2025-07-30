@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 
 set(CMAKE_SKIP_RPATH ON)
+set(CMAKE_C_VISIBILITY_PRESET "hidden")
+set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
 
 # subprojects
 add_compile_options(-fPIC
@@ -15,7 +17,7 @@ add_subdirectory(framegen)
 
 # main project
 project(lsfg-vk
-    VERSION 0.9.0
+    VERSION 1.0.0
     DESCRIPTION "Lossless Scaling Frame Generation on Linux"
     LANGUAGES CXX)
 
