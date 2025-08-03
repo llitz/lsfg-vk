@@ -219,8 +219,10 @@ namespace Layer {
 }
 
 /// Symbol definition for Vulkan instance layer.
-__attribute__((visibility("default")))
-extern "C" PFN_vkVoidFunction layer_vkGetInstanceProcAddr(VkInstance instance, const char* pName);
+extern "C"
+[[gnu::visibility("default")]]
+PFN_vkVoidFunction layer_vkGetInstanceProcAddr(VkInstance instance, const char* pName);
 /// Symbol definition for Vulkan device layer.
-__attribute__((visibility("default")))
-extern "C" PFN_vkVoidFunction layer_vkGetDeviceProcAddr(VkDevice device, const char* pName);
+extern "C"
+[[gnu::visibility("default")]]
+PFN_vkVoidFunction layer_vkGetDeviceProcAddr(VkDevice device, const char* pName);

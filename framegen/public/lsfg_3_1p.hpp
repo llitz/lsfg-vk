@@ -20,7 +20,7 @@ namespace LSFG_3_1P {
     ///
     /// @throws LSFG::vulkan_error if Vulkan objects fail to initialize.
     ///
-    __attribute__((visibility("default")))
+    [[gnu::visibility("default")]]
     void initialize(uint64_t deviceUUID,
         bool isHdr, float flowScale, uint64_t generationCount,
         const std::function<std::vector<uint8_t>(const std::string&)>& loader);
@@ -37,7 +37,7 @@ namespace LSFG_3_1P {
     ///
     /// @throws LSFG::vulkan_error if the context cannot be created.
     ///
-    __attribute__((visibility("default")))
+    [[gnu::visibility("default")]]
     int32_t createContext(
         int in0, int in1, const std::vector<int>& outN,
         VkExtent2D extent, VkFormat format);
@@ -51,7 +51,7 @@ namespace LSFG_3_1P {
     ///
     /// @throws LSFG::vulkan_error if the context cannot be presented.
     ///
-    __attribute__((visibility("default")))
+    [[gnu::visibility("default")]]
     void presentContext(int32_t id, int inSem, const std::vector<int>& outSem);
 
     ///
@@ -59,13 +59,13 @@ namespace LSFG_3_1P {
     ///
     /// @param id Unique identifier of the context to delete.
     ///
-    __attribute__((visibility("default")))
+    [[gnu::visibility("default")]]
     void deleteContext(int32_t id);
 
     ///
     /// Deinitialize the LSFG library.
     ///
-    __attribute__((visibility("default")))
+    [[gnu::visibility("default")]]
     void finalize();
 
 }
