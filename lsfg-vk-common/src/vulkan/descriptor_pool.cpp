@@ -43,14 +43,14 @@ namespace {
             .poolSizeCount = static_cast<uint32_t>(poolCounts.size()),
             .pPoolSizes = poolCounts.data()
         };
-        auto res = vk.df().CreateDescriptorPool(vk.dev(), &descpoolInfo, nullptr, &handle);
+        auto res = vk.df().CreateDescriptorPool(vk.dev(), &descpoolInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateDescriptorPool() failed");
 
         return ls::owned_ptr<VkDescriptorPool>(
             new VkDescriptorPool(handle),
             [dev = vk.dev(), defunc = vk.df().DestroyDescriptorPool](VkDescriptorPool& pool) {
-                defunc(dev, pool, nullptr);
+                defunc(dev, pool, VK_NULL_HANDLE);
             }
         );
     }

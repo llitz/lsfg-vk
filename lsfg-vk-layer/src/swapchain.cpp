@@ -159,7 +159,7 @@ VkResult Swapchain::present(const vk::Vulkan& vk,
     }
 
     // wait for completion of previous frame
-    if (this->fidx && !this->renderFence->wait(vk, 150UL * 1000 * 1000))
+    if (this->fidx && !this->renderFence->wait(vk, 150ULL * 1000 * 1000))
         throw ls::vulkan_error(VK_TIMEOUT, "vkWaitForFences() failed");
     this->renderFence->reset(vk);
 
@@ -196,7 +196,7 @@ VkResult Swapchain::present(const vk::Vulkan& vk,
 
     cmdbuf.end(vk);
     cmdbuf.submit(vk,
-        semaphores, nullptr, 0,
+        semaphores, VK_NULL_HANDLE, 0,
         {}, this->syncSemaphore->handle(), this->idx++
     );
 
@@ -262,8 +262,8 @@ VkResult Swapchain::present(const vk::Vulkan& vk,
         cmdbuf.end(vk);
         cmdbuf.submit(vk,
             waitSemaphores, this->syncSemaphore->handle(), this->idx,
-            signalSemaphores, nullptr, 0,
-            i == this->destinationImages.size() - 1 ? this->renderFence->handle() : nullptr
+            signalSemaphores, VK_NULL_HANDLE, 0,
+            i == this->destinationImages.size() - 1 ? this->renderFence->handle() : VK_NULL_HANDLE
         );
 
         // present swapchain image

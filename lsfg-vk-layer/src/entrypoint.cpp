@@ -74,7 +74,7 @@ namespace {
 
         // create instance
         auto* vkCreateInstance = reinterpret_cast<PFN_vkCreateInstance>(
-            layer_info->GetInstanceProcAddr(nullptr, "vkCreateInstance"));
+            layer_info->GetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateInstance"));
         if (!vkCreateInstance) {
             std::cerr << "lsfg-vk: failed to get next layer's vkCreateInstance, "
                 "the previous layer does not follow spec\n";
@@ -312,7 +312,7 @@ namespace {
             // get all swapchain images
             uint32_t imageCount{};
             auto res = it->second.df().GetSwapchainImagesKHR(device, *swapchain,
-                &imageCount, nullptr);
+                &imageCount, VK_NULL_HANDLE);
             if (res != VK_SUCCESS || imageCount == 0)
                 throw ls::vulkan_error(res, "vkGetSwapchainImagesKHR() failed");
 

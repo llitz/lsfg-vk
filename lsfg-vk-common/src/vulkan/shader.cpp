@@ -25,14 +25,14 @@ namespace {
             .codeSize = data_len,
             .pCode = reinterpret_cast<const uint32_t*>(data)
         };
-        auto res = vk.df().CreateShaderModule(vk.dev(), &shaderModuleInfo, nullptr, &handle);
+        auto res = vk.df().CreateShaderModule(vk.dev(), &shaderModuleInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateShaderModule() failed");
 
         return ls::owned_ptr<VkShaderModule>(
             new VkShaderModule(handle),
             [dev = vk.dev(), defunc = vk.df().DestroyShaderModule](VkShaderModule& shaderModule) {
-                defunc(dev, shaderModule, nullptr);
+                defunc(dev, shaderModule, VK_NULL_HANDLE);
             }
         );
     }
@@ -80,7 +80,7 @@ namespace {
             .bindingCount = static_cast<uint32_t>(bindings.size()),
             .pBindings = bindings.data()
         };
-        auto res = vk.df().CreateDescriptorSetLayout(vk.dev(), &info, nullptr, &handle);
+        auto res = vk.df().CreateDescriptorSetLayout(vk.dev(), &info, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateDescriptorSetLayout() failed");
 
@@ -89,7 +89,7 @@ namespace {
             [dev = vk.dev(), defunc = vk.df().DestroyDescriptorSetLayout](
                 VkDescriptorSetLayout& layout
             ) {
-                defunc(dev, layout, nullptr);
+                defunc(dev, layout, VK_NULL_HANDLE);
             }
         );
     }
@@ -104,14 +104,14 @@ namespace {
             .setLayoutCount = 1,
             .pSetLayouts = &descriptorLayout
         };
-        auto res = vk.df().CreatePipelineLayout(vk.dev(), &layoutInfo, nullptr, &handle);
+        auto res = vk.df().CreatePipelineLayout(vk.dev(), &layoutInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreatePipelineLayout() failed");
 
         return ls::owned_ptr<VkPipelineLayout>(
             new VkPipelineLayout(handle),
             [dev = vk.dev(), defunc = vk.df().DestroyPipelineLayout](VkPipelineLayout& layout) {
-                defunc(dev, layout, nullptr);
+                defunc(dev, layout, VK_NULL_HANDLE);
             }
         );
     }
@@ -134,14 +134,14 @@ namespace {
             .layout = pipelineLayout
         };
         auto res = vk.df().CreateComputePipelines(vk.dev(),
-            vk.cache(), 1, &pipelineInfo, nullptr, &handle);
+            vk.cache(), 1, &pipelineInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateComputePipelines() failed");
 
         return ls::owned_ptr<VkPipeline>(
             new VkPipeline(handle),
             [dev = vk.dev(), defunc = vk.df().DestroyPipeline](VkPipeline& pipeline) {
-                defunc(dev, pipeline, nullptr);
+                defunc(dev, pipeline, VK_NULL_HANDLE);
             }
         );
     }

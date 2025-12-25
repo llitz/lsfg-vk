@@ -66,7 +66,7 @@ namespace {
         VkInstance handle{};
 
         auto vkCreateInstance =
-            ipa<PFN_vkCreateInstance>(get_mpa(), nullptr, "vkCreateInstance");
+            ipa<PFN_vkCreateInstance>(get_mpa(), VK_NULL_HANDLE, "vkCreateInstance");
         if (!vkCreateInstance)
             throw ls::vulkan_error("failed to get vkCreateInstance symbol");
 
@@ -82,7 +82,7 @@ namespace {
             .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             .pApplicationInfo = &appInfo
         };
-        auto res = vkCreateInstance(&instanceInfo, nullptr, &handle);
+        auto res = vkCreateInstance(&instanceInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateInstance() failed");
 
@@ -93,7 +93,7 @@ namespace {
         return ls::owned_ptr<VkInstance>(
             new VkInstance(handle),
             [defunc](VkInstance& instance) {
-                defunc(instance, nullptr);
+                defunc(instance, VK_NULL_HANDLE);
             }
         );
     }
@@ -103,7 +103,7 @@ namespace {
             VkInstance instance,
             PhysicalDeviceSelector filter) {
         uint32_t phydevCount{};
-        auto res = fi.EnumeratePhysicalDevices(instance, &phydevCount, nullptr);
+        auto res = fi.EnumeratePhysicalDevices(instance, &phydevCount, VK_NULL_HANDLE);
         if (res != VK_SUCCESS || phydevCount == 0)
             throw ls::vulkan_error(res, "vkEnumeratePhysicalDevices() failed");
 
@@ -123,7 +123,7 @@ namespace {
     uint32_t findQFI(const VulkanInstanceFuncs& fi,
             VkPhysicalDevice physdev, VkQueueFlags flags) {
         uint32_t queueCount{};
-        fi.GetPhysicalDeviceQueueFamilyProperties(physdev, &queueCount, nullptr);
+        fi.GetPhysicalDeviceQueueFamilyProperties(physdev, &queueCount, VK_NULL_HANDLE);
 
         std::vector<VkQueueFamilyProperties> queues(queueCount);
         fi.GetPhysicalDeviceQueueFamilyProperties(physdev, &queueCount, queues.data());
@@ -188,7 +188,7 @@ namespace {
             .enabledExtensionCount = static_cast<uint32_t>(requestedExtensions.size()),
             .ppEnabledExtensionNames = requestedExtensions.data()
         };
-        auto res = fi.CreateDevice(physdev, &deviceInfo, nullptr, &handle);
+        auto res = fi.CreateDevice(physdev, &deviceInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateDevice() failed");
 
@@ -199,7 +199,7 @@ namespace {
         return ls::owned_ptr<VkDevice>(
             new VkDevice(handle),
             [defunc](VkDevice& device) {
-                defunc(device, nullptr);
+                defunc(device, VK_NULL_HANDLE);
             }
         );
     }
@@ -230,14 +230,14 @@ namespace {
             .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
             .queueFamilyIndex = cfi
         };
-        auto res = fd.CreateCommandPool(device, &cmdpoolInfo, nullptr, &handle);
+        auto res = fd.CreateCommandPool(device, &cmdpoolInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateCommandPool() failed");
 
         return ls::owned_ptr<VkCommandPool>(
             new VkCommandPool(handle),
             [dev = device, defunc = fd.DestroyCommandPool](VkCommandPool& pool) {
-                defunc(dev, pool, nullptr);
+                defunc(dev, pool, VK_NULL_HANDLE);
             }
         );
     }
@@ -248,7 +248,7 @@ namespace {
         if (!file.is_open())
             return;
 
-        const std::streamsize size = file.tellg();
+        const std::streamsize size = static_cast<std::streamsize>(file.tellg());
         data = std::vector<uint8_t>(static_cast<size_t>(size));
 
         file.seekg(0, std::ios::beg);
@@ -271,14 +271,14 @@ namespace {
             .initialDataSize = cache.size(),
             .pInitialData = cache.data()
         };
-        auto res = fd.CreatePipelineCache(device, &pipelineCacheInfo, nullptr, &handle);
+        auto res = fd.CreatePipelineCache(device, &pipelineCacheInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreatePipelineCache() failed");
 
         return ls::owned_ptr<VkPipelineCache>(
             new VkPipelineCache(handle),
             [dev = device, defunc = fd.DestroyPipelineCache](VkPipelineCache& cache) {
-                defunc(dev, cache, nullptr);
+                defunc(dev, cache, VK_NULL_HANDLE);
             }
         );
     }

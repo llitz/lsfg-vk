@@ -3,6 +3,7 @@
 #include "dll_reader.hpp"
 #include "lsfg-vk-common/helpers/errors.hpp"
 
+#include <ios>
 #include <unordered_map>
 #include <filesystem>
 #include <algorithm>
@@ -103,7 +104,7 @@ std::unordered_map<uint32_t, std::vector<uint8_t>> backend::extractResourcesFrom
     if (!file.is_open())
         throw ls::error("failed to open dll file");
 
-    const auto size = file.tellg();
+    const std::streamsize size = static_cast<std::streamsize>(file.tellg());
     file.seekg(0, std::ios::beg);
 
     std::vector<uint8_t> data(static_cast<size_t>(size));

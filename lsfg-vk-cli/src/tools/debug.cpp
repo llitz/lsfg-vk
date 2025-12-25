@@ -39,7 +39,7 @@ namespace {
         if (!file.is_open())
             throw ls::error("ifstream::ifstream() failed");
 
-        std::streamsize size = file.tellg();
+        std::streamsize size = static_cast<std::streamsize>(file.tellg());
         size -= 124 + 4; // dds header and magic bytes
 
         std::vector<char> code(static_cast<size_t>(size));

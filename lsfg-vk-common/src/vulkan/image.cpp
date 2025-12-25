@@ -39,14 +39,14 @@ namespace {
             .usage = usage,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE
         };
-        auto res = vk.df().CreateImage(vk.dev(), &imageInfo, nullptr, &handle);
+        auto res = vk.df().CreateImage(vk.dev(), &imageInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateImage() failed");
 
         return ls::owned_ptr<VkImage>(
             new VkImage(handle),
             [dev = vk.dev(), defunc = vk.df().DestroyImage](VkImage& image) {
-                defunc(dev, image, nullptr);
+                defunc(dev, image, VK_NULL_HANDLE);
             }
         );
     }
@@ -91,7 +91,7 @@ namespace {
             .allocationSize = reqs.size,
             .memoryTypeIndex = *mti
         };
-        auto res = vk.df().AllocateMemory(vk.dev(), &memoryInfo, nullptr, &handle);
+        auto res = vk.df().AllocateMemory(vk.dev(), &memoryInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkAllocateMemory() failed");
 
@@ -115,7 +115,7 @@ namespace {
         return ls::owned_ptr<VkDeviceMemory>(
             new VkDeviceMemory(handle),
             [dev = vk.dev(), defunc = vk.df().FreeMemory](VkDeviceMemory& memory) {
-                defunc(dev, memory, nullptr);
+                defunc(dev, memory, VK_NULL_HANDLE);
             }
         );
     }
@@ -137,14 +137,14 @@ namespace {
                 .layerCount = 1
             }
         };
-        auto res = vk.df().CreateImageView(vk.dev(), &viewInfo, nullptr, &handle);
+        auto res = vk.df().CreateImageView(vk.dev(), &viewInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateImageView() failed");
 
         return ls::owned_ptr<VkImageView>(
             new VkImageView(handle),
             [dev = vk.dev(), defunc = vk.df().DestroyImageView](VkImageView& view) {
-                defunc(dev, view, nullptr);
+                defunc(dev, view, VK_NULL_HANDLE);
             }
         );
     }

@@ -24,7 +24,7 @@ namespace {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
             .pNext = fd.has_value() ? &exportInfo : nullptr
         };
-        auto res = vk.df().CreateSemaphore(vk.dev(), &semaphoreInfo, nullptr, &handle);
+        auto res = vk.df().CreateSemaphore(vk.dev(), &semaphoreInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateSemaphore() failed");
 
@@ -44,7 +44,7 @@ namespace {
         return ls::owned_ptr<VkSemaphore>(
             new VkSemaphore(handle),
             [dev = vk.dev(), defunc = vk.df().DestroySemaphore](VkSemaphore& semaphore) {
-                defunc(dev, semaphore, nullptr);
+                defunc(dev, semaphore, VK_NULL_HANDLE);
             }
         );
     }

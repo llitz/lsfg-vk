@@ -70,8 +70,8 @@ void CommandBuffer::insertBarriers(const vk::Vulkan& vk,
     vk.df().CmdPipelineBarrier(*this->commandBuffer,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
         0,
-        0, nullptr,
-        0, nullptr,
+        0, VK_NULL_HANDLE,
+        0, VK_NULL_HANDLE,
         static_cast<uint32_t>(barriers.size()), barriers.data()
     );
 }
@@ -85,8 +85,8 @@ void CommandBuffer::dispatch(const vk::Vulkan& vk,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
         0,
-        0, nullptr,
-        0, nullptr,
+        0, VK_NULL_HANDLE,
+        0, VK_NULL_HANDLE,
         static_cast<uint32_t>(barriers.size()), barriers.data()
     );
     vk.df().CmdBindPipeline(*this->commandBuffer,
@@ -97,7 +97,7 @@ void CommandBuffer::dispatch(const vk::Vulkan& vk,
         VK_PIPELINE_BIND_POINT_COMPUTE,
         shader.pipelinelayout(),
         0, 1, &set.handle(),
-        0, nullptr
+        0, VK_NULL_HANDLE
     );
     vk.df().CmdDispatch(*this->commandBuffer, x, y, z);
 }
@@ -109,8 +109,8 @@ void CommandBuffer::blitImage(const vk::Vulkan& vk,
     vk.df().CmdPipelineBarrier(*this->commandBuffer,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
         0,
-        0, nullptr,
-        0, nullptr,
+        0, VK_NULL_HANDLE,
+        0, VK_NULL_HANDLE,
         static_cast<uint32_t>(preBarriers.size()), preBarriers.data()
     );
 
@@ -144,8 +144,8 @@ void CommandBuffer::blitImage(const vk::Vulkan& vk,
     vk.df().CmdPipelineBarrier(*this->commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
         0,
-        0, nullptr,
-        0, nullptr,
+        0, VK_NULL_HANDLE,
+        0, VK_NULL_HANDLE,
         static_cast<uint32_t>(postBarriers.size()), postBarriers.data()
     );
 }
@@ -168,8 +168,8 @@ void CommandBuffer::copyBufferToImage(const vk::Vulkan& vk,
     vk.df().CmdPipelineBarrier(*this->commandBuffer,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
         0,
-        0, nullptr,
-        0, nullptr,
+        0, VK_NULL_HANDLE,
+        0, VK_NULL_HANDLE,
         1, &barrier
     );
 

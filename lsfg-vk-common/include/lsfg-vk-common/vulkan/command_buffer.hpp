@@ -90,7 +90,7 @@ namespace vk {
             VkSemaphore waitTimelineSemaphore, uint64_t waitValue,
             std::vector<VkSemaphore> signalSemaphores,
             VkSemaphore signalTimelineSemaphore, uint64_t signalValue,
-            VkFence fence = nullptr) const;
+            VkFence fence = VK_NULL_HANDLE) const;
 
         /// submit the command buffer instantly
         /// @param vk the vulkan instance

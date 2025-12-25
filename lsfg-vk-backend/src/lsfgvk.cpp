@@ -139,7 +139,7 @@ Instance::Instance(
         for (const auto& device : devices) {
             // check if the physical device supports VK_EXT_pci_bus_info
             uint32_t ext_count{};
-            funcs.EnumerateDeviceExtensionProperties(device, nullptr, &ext_count, nullptr);
+            funcs.EnumerateDeviceExtensionProperties(device, nullptr, &ext_count, VK_NULL_HANDLE);
 
             std::vector<VkExtensionProperties> extensions(ext_count);
             funcs.EnumerateDeviceExtensionProperties(device, nullptr, &ext_count, extensions.data());
@@ -610,7 +610,7 @@ void Context::scheduleFrames() {
         cmdbuf.submit(this->ctx.vk,
             {}, this->prepassSemaphore.handle(), this->idx - 1,
             {}, this->syncSemaphore.handle(), this->idx + i,
-            i == this->destImages.size() - 1 ? this->cmdbufFence.handle() : nullptr
+            i == this->destImages.size() - 1 ? this->cmdbufFence.handle() : VK_NULL_HANDLE
         );
     }
 

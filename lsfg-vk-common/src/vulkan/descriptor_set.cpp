@@ -24,12 +24,11 @@ namespace {
             const vk::DescriptorPool& pool, const vk::Shader& shader) {
         VkDescriptorSet handle{};
 
-        auto* layout = shader.descriptorlayout();
         const VkDescriptorSetAllocateInfo setInfo{
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
             .descriptorPool = pool.handle(),
             .descriptorSetCount = 1,
-            .pSetLayouts = &layout
+            .pSetLayouts = &shader.descriptorlayout()
         };
         auto res = vk.df().AllocateDescriptorSets(vk.dev(), &setInfo, &handle);
         if (res != VK_SUCCESS)
@@ -126,5 +125,5 @@ DescriptorSet::DescriptorSet(const vk::Vulkan& vk,
         });
 
     vk.df().UpdateDescriptorSets(vk.dev(),
-        static_cast<uint32_t>(entries.size()), entries.data(), 0, nullptr);
+        static_cast<uint32_t>(entries.size()), entries.data(), 0, VK_NULL_HANDLE);
 }

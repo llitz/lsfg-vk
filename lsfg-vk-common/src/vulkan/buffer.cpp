@@ -27,14 +27,14 @@ namespace {
             .usage = usage,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE
         };
-        auto res = vk.df().CreateBuffer(vk.dev(), &bufferInfo, nullptr, &handle);
+        auto res = vk.df().CreateBuffer(vk.dev(), &bufferInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkCreateBuffer() failed");
 
         return ls::owned_ptr<VkBuffer>(
             new VkBuffer(handle),
             [dev = vk.dev(), defunc = vk.df().DestroyBuffer](VkBuffer& buffer) {
-                defunc(dev, buffer, nullptr);
+                defunc(dev, buffer, VK_NULL_HANDLE);
             }
         );
     }
@@ -57,7 +57,7 @@ namespace {
             .allocationSize = reqs.size,
             .memoryTypeIndex = *mti
         };
-        auto res = vk.df().AllocateMemory(vk.dev(), &memoryInfo, nullptr, &handle);
+        auto res = vk.df().AllocateMemory(vk.dev(), &memoryInfo, VK_NULL_HANDLE, &handle);
         if (res != VK_SUCCESS)
             throw ls::vulkan_error(res, "vkAllocateMemory() failed");
 
@@ -68,7 +68,7 @@ namespace {
         return ls::owned_ptr<VkDeviceMemory>(
             new VkDeviceMemory(handle),
             [dev = vk.dev(), defunc = vk.df().FreeMemory](VkDeviceMemory& memory) {
-                defunc(dev, memory, nullptr);
+                defunc(dev, memory, VK_NULL_HANDLE);
             }
         );
     }
