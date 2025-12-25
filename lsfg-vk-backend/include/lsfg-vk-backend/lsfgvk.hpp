@@ -129,4 +129,11 @@ namespace lsfgvk::backend {
         std::vector<std::unique_ptr<Context>> m_contexts;
     };
 
+    ///
+    /// Make all lsfg-vk instances leaking.
+    /// This is to workaround a bug in the Vulkan loader, which
+    /// makes it impossible to destroy Vulkan instances and devices.
+    ///
+    void makeLeaking();
+
 }

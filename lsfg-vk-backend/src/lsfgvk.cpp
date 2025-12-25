@@ -32,6 +32,7 @@
 #include <exception>
 #include <filesystem>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -77,6 +78,12 @@ namespace lsfgvk::backend {
         /// @return the RenderDoc API
         [[nodiscard]] const auto& getRenderDocAPI() const { return this->renderdoc; }
 #endif
+        // Movable, non-copyable, custom destructor
+        InstanceImpl(const InstanceImpl&) = delete;
+        InstanceImpl& operator=(const InstanceImpl&) = delete;
+        InstanceImpl(InstanceImpl&&) = default;
+        InstanceImpl& operator=(InstanceImpl&&) = default;
+        ~InstanceImpl();
     private:
         vk::Vulkan vk;
         ShaderRegistry shaders;
@@ -634,3 +641,24 @@ void Instance::closeContext(const Context& context) {
 }
 
 Instance::~Instance() = default;
+
+// leaking shenanigans
+
+namespace {
+    bool leaking{false}; // NOLINT
+}
+
+InstanceImpl::~InstanceImpl() {
+    if (!leaking) return;
+
+    try {
+        new vk::Vulkan(std::move(this->vk));
+    } catch (...) {
+        std::cerr << "lsfg-vk: failed to leak Vulkan instance\n";
+    }
+
+}
+
+void backend::makeLeaking() {
+    leaking = true;
+}

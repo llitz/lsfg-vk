@@ -232,8 +232,8 @@ namespace {
         // destroy layer info
         // NOTE: there's no real way of unloading the layer without a deconstructor.
         // multiple instances just aren't common enough to worry about it.
-        // NOTE2: it doesn't really matter anyways, because the myvkDestroyDevice code
-        // freezes the entire thing anyways.
+        // NOTE2: this IS a memory leak, because the VkInstance inside of root->backend
+        // cannot be destroyed, due to a Vulkan-Loader limitation/bug.
         delete layer_info;
         layer_info = nullptr;
     }

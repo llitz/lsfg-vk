@@ -104,6 +104,8 @@ Swapchain::Swapchain(const vk::Vulkan& vk, backend::Instance& backend,
                 backend->closeContext(ctx);
             }
         );
+
+        backend::makeLeaking(); // don't worry about it :3
     } catch (const std::exception& e) {
         throw ls::error("failed to create swapchain context", e);
     }
