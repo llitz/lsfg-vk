@@ -6,6 +6,7 @@
 #include "lsfg-vk-common/vulkan/vulkan.hpp"
 #include "swapchain.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -29,9 +30,9 @@ namespace {
         Root root;
     }* layer_info;
 
-    // instance-wide info initialized at instance creation
+    // instance-wide info initialized at instance creation(s)
     struct InstanceInfo {
-        VkInstance handle;
+        std::vector<VkInstance> handles; // there may be several instances
         vk::VulkanInstanceFuncs funcs;
 
         std::unordered_map<VkDevice, vk::Vulkan> devices;
@@ -91,11 +92,13 @@ namespace {
                 }
             );
 
-            instance_info = new InstanceInfo{
-                .handle = *instance,
-                .funcs = vk::initVulkanInstanceFuncs(*instance, layer_info->GetInstanceProcAddr, true),
-                .devices = {}
-            };
+            if (!instance_info)
+                instance_info = new InstanceInfo{
+                    .funcs = vk::initVulkanInstanceFuncs(*instance,
+                        layer_info->GetInstanceProcAddr, true),
+                };
+
+            instance_info->handles.push_back(*instance);
 
             return VK_SUCCESS;
         } catch (const ls::vulkan_error& e) {
@@ -179,7 +182,7 @@ namespace {
             instance_info->devices.emplace(
                 *device,
                 vk::Vulkan(
-                    instance_info->handle, *device, physdev,
+                    instance_info->handles.front(), *device, physdev,
                     instance_info->funcs, vk::initVulkanDeviceFuncs(instance_info->funcs, *device,
                         true),
                     true, setLoaderData
@@ -214,9 +217,16 @@ namespace {
 
     // destroy instance
     void myvkDestroyInstance(VkInstance instance, const VkAllocationCallbacks* alloc) {
-        // destroy instance info
-        delete instance_info;
-        instance_info = nullptr;
+        // remove instance handle
+        auto it = std::ranges::find(instance_info->handles, instance);
+        if (it != instance_info->handles.end())
+            instance_info->handles.erase(it);
+
+        // destroy instance info if no handles remain
+        if (instance_info->handles.empty()) {
+            delete instance_info;
+            instance_info = nullptr;
+        }
 
         // destroy instance
         auto vkDestroyInstance = reinterpret_cast<PFN_vkDestroyInstance>(
@@ -228,14 +238,6 @@ namespace {
         }
 
         vkDestroyInstance(instance, alloc);
-
-        // destroy layer info
-        // NOTE: there's no real way of unloading the layer without a deconstructor.
-        // multiple instances just aren't common enough to worry about it.
-        // NOTE2: this IS a memory leak, because the VkInstance inside of root->backend
-        // cannot be destroyed, due to a Vulkan-Loader limitation/bug.
-        delete layer_info;
-        layer_info = nullptr;
     }
 
     // get optional function pointer override
@@ -249,9 +251,6 @@ namespace {
     // get instance-level function pointers
     PFN_vkVoidFunction myvkGetInstanceProcAddr(VkInstance instance, const char* name) {
         if (!name) return nullptr;
-
-        if (std::string(name) == "vkCreateInstance") // pre-instance function
-            return reinterpret_cast<PFN_vkVoidFunction>(myvkCreateInstance);
 
         auto func = getProcAddr(name);
         if (func) return func;
@@ -452,6 +451,15 @@ VkResult vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface* pVers
         || pVersionStruct->sType != LAYER_NEGOTIATE_INTERFACE_STRUCT
         || pVersionStruct->loaderLayerInterfaceVersion < 2)
         return VK_ERROR_INITIALIZATION_FAILED;
+
+    // if the layer has already been initialized, skip
+    if (layer_info) {
+        pVersionStruct->loaderLayerInterfaceVersion = 2;
+        pVersionStruct->pfnGetPhysicalDeviceProcAddr = nullptr;
+        pVersionStruct->pfnGetDeviceProcAddr = myvkGetDeviceProcAddr;
+        pVersionStruct->pfnGetInstanceProcAddr = myvkGetInstanceProcAddr;
+        return VK_SUCCESS;
+    }
 
     // load the layer configuration
     try {
