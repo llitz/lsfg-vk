@@ -98,7 +98,7 @@ Swapchain::Swapchain(const vk::Vulkan& vk, backend::Instance& backend,
             new ls::R<backend::Context>(backend.openContext(
                 { sourceFds.at(0), sourceFds.at(1) }, destinationFds, syncFd,
                 extent.width, extent.height,
-                hdr, this->profile.flow_scale, this->profile.performance_mode
+                hdr, 1.0F / this->profile.flow_scale, this->profile.performance_mode
             )),
             [backend = &backend](ls::R<backend::Context>& ctx) {
                 backend->closeContext(ctx);
