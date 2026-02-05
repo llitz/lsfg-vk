@@ -69,6 +69,7 @@ void layer::context_ModifySwapchainCreateInfo(const ls::GameConf& profile, uint3
 Swapchain::Swapchain(const vk::Vulkan& vk, backend::Instance& backend,
             ls::GameConf profile, SwapchainInfo info) :
         instance(backend),
+        creationMultiplier(profile.multiplier),
         profile(std::move(profile)), info(std::move(info)) {
     const VkExtent2D extent = this->info.extent;
     const bool hdr = this->info.format > 57;

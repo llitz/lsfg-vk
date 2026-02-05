@@ -27,6 +27,12 @@ namespace lsfgvk::layer {
         /// @return true if active
         [[nodiscard]] bool active() const { return this->active_profile.has_value(); }
 
+        /// get the current active profile
+        /// @return pointer to active profile, or nullptr if inactive
+        [[nodiscard]] const ls::GameConf* getActiveProfile() const { 
+            return this->active_profile.has_value() ? &this->active_profile.value() : nullptr;
+        }
+
         /// ensure the layer is up-to-date
         /// @return true if the configuration was updated
         bool update();

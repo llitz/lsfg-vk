@@ -363,11 +363,44 @@ namespace {
 
         if (reload) {
             try {
+                if (!layer_info->root.getActiveProfile()) {
+                    std::cerr << "lsfg-vk: config reloaded but no active profile, ignoring\n";
+                    reload = false;
+                }
+            } catch (const std::exception&) {
+                reload = false;
+            }
+        }
+
+        bool multiplierChanged = false;
+        if (reload && layer_info->root.getActiveProfile()) {
+            try {
+                const auto& currentProfile = *layer_info->root.getActiveProfile();
+
                 for (const auto& [swapchain, vk] : instance_info->swapchains) {
-                    auto& info = instance_info->swapchainInfos.at(swapchain);
+                    auto& context = layer_info->root.getSwapchainContext(swapchain);
+
+                    if (context.getCreationMultiplier() != currentProfile.multiplier) {
+                        std::cerr << "lsfg-vk: multiplier changed ("
+                                  << context.getCreationMultiplier() << " -> "
+                                  << currentProfile.multiplier
+                                  << "), swapchain recreation required\n";
+                        multiplierChanged = true;
+                        break;
+                    }
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "lsfg-vk: error checking multiplier: " << e.what() << '\n';
+            }
+        }
+
+        if (reload && !multiplierChanged && layer_info->root.getActiveProfile()) {
+            try {
+                for (const auto& [swapchain, vk] : instance_info->swapchains) {
+                    auto& swapchainInfo = instance_info->swapchainInfos.at(swapchain);
 
                     layer_info->root.removeSwapchainContext(swapchain);
-                    layer_info->root.createSwapchainContext(vk, swapchain, info);
+                    layer_info->root.createSwapchainContext(vk, swapchain, swapchainInfo);
                 }
 
                 std::cerr << "lsfg-vk: updated lsfg-vk configuration\n";
@@ -376,7 +409,6 @@ namespace {
                 std::cerr << "- " << e.what() << '\n';
             }
         }
-
         // present each swapchain
         for (size_t i = 0; i < info->swapchainCount; i++) {
             const auto& swapchain = info->pSwapchains[i];
@@ -385,35 +417,61 @@ namespace {
             if (it == instance_info->swapchains.end())
                 return VK_ERROR_INITIALIZATION_FAILED;
 
-            try {
-                std::vector<VkSemaphore> waitSemaphores;
-                waitSemaphores.reserve(info->waitSemaphoreCount);
+            VkResult swapchainResult = VK_SUCCESS;
+            bool skipPresent = false;
 
-                for (size_t j = 0; j < info->waitSemaphoreCount; j++)
-                    waitSemaphores.push_back(info->pWaitSemaphores[j]);
-
+            if (multiplierChanged) {
                 auto& context = layer_info->root.getSwapchainContext(swapchain);
-                result = context.present(it->second,
-                    queue, swapchain,
-                    const_cast<void*>(info->pNext),
-                    info->pImageIndices[i],
-                    { waitSemaphores.begin(), waitSemaphores.end() }
-                );
-            } catch (const ls::vulkan_error& e) {
-                if (e.error() != VK_ERROR_OUT_OF_DATE_KHR) {
-                    std::cerr << "lsfg-vk: something went wrong during lsfg-vk swapchain presentation:\n";
-                    std::cerr << "- " << e.what() << '\n';
-                } // silently swallow out-of-date errors
-
-                result = e.error();
-            } catch (const std::exception& e) {
-                std::cerr << "lsfg-vk: something went wrong during lsfg-vk swapchain presentation:\n";
-                std::cerr << "- " << e.what() << '\n';
-                result = VK_ERROR_UNKNOWN;
+                const auto& currentProfile = *layer_info->root.getActiveProfile();
+                if (context.getCreationMultiplier() != currentProfile.multiplier) {
+                    std::cerr << "lsfg-vk: swapchain " << swapchain
+                                  << " out of date (multiplier: " << context.getCreationMultiplier()
+                                   << " -> " << currentProfile.multiplier << ")\n";
+                    swapchainResult = VK_ERROR_OUT_OF_DATE_KHR;
+                    skipPresent = true;
+                }
             }
 
-            if (result != VK_SUCCESS && info->pResults)
-                info->pResults[i] = result;
+            if (!skipPresent) {
+                try {
+                    std::vector<VkSemaphore> waitSemaphores;
+                    waitSemaphores.reserve(info->waitSemaphoreCount);
+
+                    for (size_t j = 0; j < info->waitSemaphoreCount; j++)
+                        waitSemaphores.push_back(info->pWaitSemaphores[j]);
+
+                    auto& context = layer_info->root.getSwapchainContext(swapchain);
+                    swapchainResult = context.present(it->second,
+                        queue, swapchain,
+                        const_cast<void*>(info->pNext),
+                        info->pImageIndices[i],
+                        { waitSemaphores.begin(), waitSemaphores.end() }
+                    );
+                } catch (const ls::vulkan_error& e) {
+                    if (e.error() != VK_ERROR_OUT_OF_DATE_KHR) {
+                        std::cerr << "lsfg-vk: something went wrong during lsfg-vk swapchain presentation:\n";
+                        std::cerr << "- " << e.what() << '\n';
+                    }
+
+                    swapchainResult = e.error();
+                } catch (const std::exception& e) {
+                    std::cerr << "lsfg-vk: something went wrong during lsfg-vk swapchain presentation:\n";
+                    std::cerr << "- " << e.what() << '\n';
+                    swapchainResult = VK_ERROR_UNKNOWN;
+                }
+            }
+
+            if (info->pResults)
+                info->pResults[i] = swapchainResult;
+
+            if (swapchainResult == VK_ERROR_OUT_OF_DATE_KHR) {
+                result = swapchainResult;
+            } else if (result != VK_ERROR_OUT_OF_DATE_KHR &&
+                       swapchainResult != VK_SUCCESS) {
+                result = swapchainResult;
+            } else if (result == VK_SUCCESS) {
+                result = swapchainResult;
+            }
         }
 
         return result;

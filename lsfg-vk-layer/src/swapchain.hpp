@@ -58,6 +58,10 @@ namespace lsfgvk::layer {
             VkQueue queue, VkSwapchainKHR swapchain,
             void* next_chain, uint32_t imageIdx,
             const std::vector<VkSemaphore>& semaphores);
+
+        /// get multiplier value at swapchain creation time
+        /// @return multiplier used when swapchain was created
+        [[nodiscard]] size_t getCreationMultiplier() const { return this->creationMultiplier; }
     private:
         std::vector<vk::Image> sourceImages;
         std::vector<vk::Image> destinationImages;
@@ -76,6 +80,8 @@ namespace lsfgvk::layer {
         ls::owned_ptr<ls::R<backend::Context>> ctx;
         size_t idx{1};
         size_t fidx{0}; // real frame index
+
+        size_t creationMultiplier;
 
         ls::GameConf profile;
         SwapchainInfo info;
