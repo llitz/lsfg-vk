@@ -136,6 +136,28 @@ VkResult Swapchain::present(const vk::Vulkan& vk,
     const auto& swapchainImage = this->info.images.at(imageIdx);
     const auto& sourceImage = this->sourceImages.at(this->fidx % 2);
 
+    // Bypass frame generation when multiplier=1
+    // Present original swapchain image unchanged with zero overhead
+    if (this->profile.multiplier == 1) {
+        const VkPresentInfoKHR presentInfo{
+            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .pNext = next_chain,
+            .waitSemaphoreCount = static_cast<uint32_t>(semaphores.size()),
+            .pWaitSemaphores = semaphores.data(),
+            .swapchainCount = 1,
+            .pSwapchains = &swapchain,
+            .pImageIndices = &imageIdx,
+        };
+
+        auto res = vk.df().QueuePresentKHR(queue, &presentInfo);
+        if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR)
+            throw ls::vulkan_error(res, "vkQueuePresentKHR() failed");
+
+        this->idx++;
+        this->fidx++;
+        return res;
+    }
+
     // schedule frame generation
     try {
         this->instance.get().scheduleFrames(this->ctx.get());

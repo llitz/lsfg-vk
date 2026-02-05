@@ -194,8 +194,8 @@ ApplicationWindow {
                     SpinBox {
                         Layout.alignment: Qt.AlignRight
 
-                        from: 2
-                        to: 100
+                        from: 1
+                        to: 4
 
                         value: backend.multiplier
                         onValueModified: backend.multiplier = value

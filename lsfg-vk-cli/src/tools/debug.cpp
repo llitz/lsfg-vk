@@ -68,8 +68,8 @@ int debug::run(const Options& opts) {
         // parse options
         if (opts.flow < 0.25F || opts.flow > 1.0F)
             throw ls::error("flow scale must be between 0.25 and 1.0");
-        if (opts.multiplier < 2)
-            throw ls::error("multiplier must be 2 or greater");
+        if (opts.multiplier < 1)
+            throw ls::error("multiplier must be at least 1");
         if (opts.width <= 0 || opts.height <= 0)
             throw ls::error("width and height must be positive integers");
         const VkExtent2D extent{
