@@ -40,6 +40,7 @@ namespace {
         std::unordered_map<VkSwapchainKHR, ls::R<vk::Vulkan>> swapchains;
         std::unordered_map<VkSwapchainKHR, SwapchainInfo> swapchainInfos;
         std::unordered_set<VkSwapchainKHR> retiredSwapchains;
+        std::unordered_map<VkSwapchainKHR, size_t> pendingMultiplier;
     }* instance_info; // NOLINT (global variable)
 
     // create instance
@@ -365,38 +366,68 @@ namespace {
             }
         }
 
-        bool multiplierChanged = false;
+        std::unordered_map<VkSwapchainKHR, ls::GameConf> effectiveProfiles;
         if (reload && layer_info->root.getActiveProfile()) {
             try {
-                const auto& currentProfile = *layer_info->root.getActiveProfile();
+                const auto& requestedProfile = *layer_info->root.getActiveProfile();
 
                 for (const auto& [swapchain, vk] : instance_info->swapchains) {
-                    auto& context = layer_info->root.getSwapchainContext(swapchain);
+                    if (instance_info->retiredSwapchains.find(swapchain)
+                            != instance_info->retiredSwapchains.end())
+                        continue;
 
-                    if (context.getCreationMultiplier() != currentProfile.multiplier) {
-                        std::cerr << "lsfg-vk: multiplier changed ("
-                                  << context.getCreationMultiplier() << " -> "
-                                  << currentProfile.multiplier
-                                  << "), swapchain recreation required\n";
-                        multiplierChanged = true;
-                        break;
+                    auto& context = layer_info->root.getSwapchainContext(swapchain);
+                    const size_t currentMultiplier = context.getCreationMultiplier();
+                    const size_t requestedMultiplier = requestedProfile.multiplier;
+
+                    auto profile = requestedProfile;
+
+                    if (requestedMultiplier > currentMultiplier) {
+                        auto it = instance_info->pendingMultiplier.find(swapchain);
+                        if (it == instance_info->pendingMultiplier.end()
+                                || it->second != requestedMultiplier) {
+                            std::cerr << "lsfg-vk: multiplier change deferred ("
+                                      << currentMultiplier << " -> "
+                                      << requestedMultiplier
+                                      << "), waiting for swapchain recreation\n";
+                        }
+                        instance_info->pendingMultiplier[swapchain] = requestedMultiplier;
+                        profile.multiplier = currentMultiplier;
+                    } else {
+                        auto it = instance_info->pendingMultiplier.find(swapchain);
+                        if (it != instance_info->pendingMultiplier.end()) {
+                            std::cerr << "lsfg-vk: multiplier change applied ("
+                                      << it->second << " -> "
+                                      << requestedMultiplier << ")\n";
+                            instance_info->pendingMultiplier.erase(it);
+                        }
+                        profile.multiplier = requestedMultiplier;
                     }
+
+                    effectiveProfiles.emplace(swapchain, profile);
                 }
             } catch (const std::exception& e) {
                 std::cerr << "lsfg-vk: error checking multiplier: " << e.what() << '\n';
             }
         }
 
-        if (reload && !multiplierChanged && layer_info->root.getActiveProfile()) {
+        if (reload && layer_info->root.getActiveProfile()) {
             try {
                 for (const auto& [swapchain, vk] : instance_info->swapchains) {
+                    if (instance_info->retiredSwapchains.find(swapchain)
+                            != instance_info->retiredSwapchains.end())
+                        continue;
+
+                    auto profileIt = effectiveProfiles.find(swapchain);
+                    if (profileIt == effectiveProfiles.end())
+                        continue;
+
                     auto& swapchainInfo = instance_info->swapchainInfos.at(swapchain);
+                    const auto& profile = profileIt->second;
 
                     layer_info->root.removeSwapchainContext(swapchain);
-                    layer_info->root.createSwapchainContext(vk, swapchain, swapchainInfo);
+                    layer_info->root.createSwapchainContext(vk, swapchain, swapchainInfo, profile);
                 }
-
-                std::cerr << "lsfg-vk: updated lsfg-vk configuration\n";
             } catch (const std::exception& e) {
                 std::cerr << "lsfg-vk: something went wrong during lsfg-vk configuration update:\n";
                 std::cerr << "- " << e.what() << '\n';
@@ -412,6 +443,7 @@ namespace {
 
             VkResult swapchainResult = VK_SUCCESS;
             bool skipPresent = false;
+            bool deferred = false;
 
             if (instance_info->retiredSwapchains.find(swapchain)
                     != instance_info->retiredSwapchains.end()) {
@@ -419,16 +451,9 @@ namespace {
                 skipPresent = true;
             }
 
-            if (!skipPresent && multiplierChanged) {
-                auto& context = layer_info->root.getSwapchainContext(swapchain);
-                const auto& currentProfile = *layer_info->root.getActiveProfile();
-                if (context.getCreationMultiplier() != currentProfile.multiplier) {
-                    std::cerr << "lsfg-vk: swapchain " << swapchain
-                                  << " out of date (multiplier: " << context.getCreationMultiplier()
-                                   << " -> " << currentProfile.multiplier << ")\n";
-                    swapchainResult = VK_ERROR_OUT_OF_DATE_KHR;
-                    skipPresent = true;
-                }
+            if (!skipPresent) {
+                deferred = instance_info->pendingMultiplier.find(swapchain)
+                    != instance_info->pendingMultiplier.end();
             }
 
             if (!skipPresent) {
@@ -460,6 +485,11 @@ namespace {
                 }
             }
 
+            if (deferred && (swapchainResult == VK_SUCCESS
+                    || swapchainResult == VK_SUBOPTIMAL_KHR)) {
+                swapchainResult = VK_ERROR_OUT_OF_DATE_KHR;
+            }
+
             if (info->pResults)
                 info->pResults[i] = swapchainResult;
 
@@ -486,6 +516,7 @@ namespace {
             return;
 
         instance_info->retiredSwapchains.erase(swapchain);
+        instance_info->pendingMultiplier.erase(swapchain);
 
         const auto& info_mapping = instance_info->swapchainInfos.find(swapchain);
         if (info_mapping != instance_info->swapchainInfos.end())

@@ -61,6 +61,14 @@ namespace lsfgvk::layer {
         /// @throws ls::error on failure
         void createSwapchainContext(const vk::Vulkan& vk, VkSwapchainKHR swapchain,
             const SwapchainInfo& info);
+        /// create swapchain context with a specific profile
+        /// @param vk vulkan instance
+        /// @param swapchain swapchain handle
+        /// @param info swapchain info
+        /// @param profile profile to use for context creation
+        /// @throws ls::error on failure
+        void createSwapchainContext(const vk::Vulkan& vk, VkSwapchainKHR swapchain,
+            const SwapchainInfo& info, const ls::GameConf& profile);
         /// get swapchain context
         /// @param swapchain swapchain handle
         /// @return swapchain context

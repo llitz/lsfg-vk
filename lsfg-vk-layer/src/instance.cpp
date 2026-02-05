@@ -170,6 +170,12 @@ void Root::createSwapchainContext(const vk::Vulkan& vk,
         throw ls::error("attempted to create swapchain context while layer is inactive");
     const auto& profile = *this->active_profile;
 
+    this->createSwapchainContext(vk, swapchain, info, profile);
+}
+
+void Root::createSwapchainContext(const vk::Vulkan& vk,
+        VkSwapchainKHR swapchain, const SwapchainInfo& info, const ls::GameConf& profile) {
+
     if (!this->backend.has_value()) { // emplace backend late, due to loader bug
         const auto& global = this->config.get().global();
 
