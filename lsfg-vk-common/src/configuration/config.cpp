@@ -101,7 +101,7 @@ namespace {
         return active_in;
     }
     /// parse a pacing method from string
-    Pacing parcingFromString(const std::string& str) {
+    Pacing pacingFromString(const std::string& str) {
         if (str == "none")
             return Pacing::None;
         throw ls::error("unknown pacing method: " + str);
@@ -127,7 +127,7 @@ namespace {
             .multiplier = tbl["multiplier"].value_or(2U),
             .flow_scale = tbl["flow_scale"].value_or(1.0F),
             .performance_mode = tbl["performance_mode"].value_or(false),
-            .pacing = parcingFromString(tbl["pacing"].value_or<std::string>("none"))
+            .pacing = pacingFromString(tbl["pacing"].value_or<std::string>("none"))
         };
 
         if (conf.multiplier <= 1)
@@ -178,7 +178,7 @@ namespace {
         const char* performance = std::getenv("LSFGVK_PERFORMANCE_MODE");
         if (performance) conf.performance_mode = std::string(performance) == "1";
         const char* pacing = std::getenv("LSFGVK_PACING");
-        if (pacing) conf.pacing = parcingFromString(std::string(pacing));
+        if (pacing) conf.pacing = pacingFromString(std::string(pacing));
 
         if (conf.multiplier <= 1)
             throw ls::error("multiplier must be greater than 1");
