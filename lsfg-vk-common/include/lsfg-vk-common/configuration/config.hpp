@@ -35,6 +35,10 @@ namespace ls {
         std::optional<std::string> gpu;
         /// multiplier for frame generation
         size_t multiplier{2};
+        /// reserve swapchain multiplier capacity
+        size_t reserve_multiplier{1};
+        /// defer multiplier change until swapchain recreation
+        bool defer_multiplier_change{true};
         /// non-inverted flow scale
         float flow_scale{1.00F};
         /// use performance mode

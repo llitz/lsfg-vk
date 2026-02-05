@@ -406,6 +406,7 @@ namespace {
         }
 
         std::unordered_map<VkSwapchainKHR, ls::GameConf> effectiveProfiles;
+        std::unordered_set<VkSwapchainKHR> forceOutOfDate;
         if (reload && layer_info->root.getActiveProfile()) {
             try {
                 const auto& requestedProfile = *layer_info->root.getActiveProfile();
@@ -416,14 +417,24 @@ namespace {
                         continue;
 
                     auto& context = layer_info->root.getSwapchainContext(swapchain);
-                    const size_t currentMultiplier = context.getCreationMultiplier();
+                    const size_t capacityMultiplier = context.getCreationMultiplier();
+                    const size_t currentMultiplier = context.getProfileMultiplier();
                     const size_t requestedMultiplier = requestedProfile.multiplier;
+                    const bool deferAllowed = requestedProfile.defer_multiplier_change;
 
                     auto profile = requestedProfile;
 
-                    if (requestedMultiplier > currentMultiplier) {
-                        auto it = instance_info->pendingMultiplier.find(swapchain);
-                        instance_info->pendingMultiplier[swapchain] = requestedMultiplier;
+                    if (profile.reserve_multiplier > capacityMultiplier)
+                        profile.reserve_multiplier = capacityMultiplier;
+
+                    if (requestedMultiplier > capacityMultiplier) {
+                        if (deferAllowed) {
+                            instance_info->pendingMultiplier[swapchain] = requestedMultiplier;
+                        } else {
+                            instance_info->pendingMultiplier.erase(swapchain);
+                            instance_info->loggedDeferredMultiplier.erase(swapchain);
+                            forceOutOfDate.emplace(swapchain);
+                        }
                         profile.multiplier = currentMultiplier;
                     } else {
                         auto it = instance_info->pendingMultiplier.find(swapchain);
@@ -475,6 +486,11 @@ namespace {
 
             if (instance_info->retiredSwapchains.find(swapchain)
                     != instance_info->retiredSwapchains.end()) {
+                swapchainResult = VK_ERROR_OUT_OF_DATE_KHR;
+                skipPresent = true;
+            }
+
+            if (!skipPresent && forceOutOfDate.find(swapchain) != forceOutOfDate.end()) {
                 swapchainResult = VK_ERROR_OUT_OF_DATE_KHR;
                 skipPresent = true;
             }

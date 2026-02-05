@@ -203,6 +203,33 @@ ApplicationWindow {
                 }
 
                 GroupEntry {
+                    title: "Reserve Multiplier"
+                    description: "Reserve swapchain capacity for multiplier changes"
+
+                    SpinBox {
+                        Layout.alignment: Qt.AlignRight
+
+                        from: 1
+                        to: 4
+
+                        value: backend.reserve_multiplier
+                        onValueModified: backend.reserve_multiplier = value
+                    }
+                }
+
+                GroupEntry {
+                    title: "Defer Multiplier Change"
+                    description: "Keep presenting until swapchain is recreated"
+
+                    CheckBox {
+                        Layout.alignment: Qt.AlignRight
+
+                        checked: backend.defer_multiplier_change
+                        onToggled: backend.defer_multiplier_change = checked
+                    }
+                }
+
+                GroupEntry {
                     title: "Flow Scale"
                     description: "Lower the internal motion estimation resolution"
 

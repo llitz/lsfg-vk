@@ -30,6 +30,8 @@ namespace lsfgvk::ui {
         Q_PROPERTY(QStringListModel* active_in READ calculateActiveInModel NOTIFY refreshUI)
         Q_PROPERTY(int active_in_index READ getActiveInIndex WRITE activeInSelected NOTIFY refreshUI)
         Q_PROPERTY(size_t multiplier READ getMultiplier WRITE multiplierUpdated NOTIFY refreshUI)
+        Q_PROPERTY(size_t reserve_multiplier READ getReserveMultiplier WRITE reserveMultiplierUpdated NOTIFY refreshUI)
+        Q_PROPERTY(bool defer_multiplier_change READ getDeferMultiplierChange WRITE deferMultiplierChangeUpdated NOTIFY refreshUI)
         Q_PROPERTY(float flow_scale READ getFlowScale WRITE flowScaleUpdated NOTIFY refreshUI)
         Q_PROPERTY(bool performance_mode READ getPerformanceMode WRITE performanceModeUpdated NOTIFY refreshUI)
         Q_PROPERTY(int pacing_mode READ getPacingMode WRITE pacingModeUpdated NOTIFY refreshUI)
@@ -73,6 +75,14 @@ namespace lsfgvk::ui {
         [[nodiscard]] size_t getMultiplier() const {
             VALIDATE_AND_GET_PROFILE(2)
             return conf.multiplier;
+        }
+        [[nodiscard]] size_t getReserveMultiplier() const {
+            VALIDATE_AND_GET_PROFILE(1)
+            return conf.reserve_multiplier;
+        }
+        [[nodiscard]] bool getDeferMultiplierChange() const {
+            VALIDATE_AND_GET_PROFILE(true)
+            return conf.defer_multiplier_change;
         }
         [[nodiscard]] float getFlowScale() const {
             VALIDATE_AND_GET_PROFILE(1.0F)
@@ -136,6 +146,20 @@ namespace lsfgvk::ui {
         void multiplierUpdated(size_t multiplier) {
             VALIDATE_AND_GET_PROFILE()
             conf.multiplier = multiplier;
+            MARK_DIRTY()
+        }
+        void reserveMultiplierUpdated(size_t reserve_multiplier) {
+            VALIDATE_AND_GET_PROFILE()
+            if (reserve_multiplier < 1)
+                reserve_multiplier = 1;
+            if (reserve_multiplier > 4)
+                reserve_multiplier = 4;
+            conf.reserve_multiplier = reserve_multiplier;
+            MARK_DIRTY()
+        }
+        void deferMultiplierChangeUpdated(bool defer_multiplier_change) {
+            VALIDATE_AND_GET_PROFILE()
+            conf.defer_multiplier_change = defer_multiplier_change;
             MARK_DIRTY()
         }
         void flowScaleUpdated(float flow_scale) {

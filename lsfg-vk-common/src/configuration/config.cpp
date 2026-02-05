@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <iostream>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -40,7 +41,9 @@ active_in = [ # see the wiki for more info
     'vkcubepp'
 ]
 # gpu = 'NVIDIA GeForce RTX 5080' # see the wiki for more info
-multiplier = 4
+ multiplier = 4
+ reserve_multiplier = 1
+ defer_multiplier_change = true
 flow_scale = 0.85
 performance_mode = true
 pacing = 'none' # see the wiki for more info
@@ -49,7 +52,9 @@ pacing = 'none' # see the wiki for more info
 name = "2x FG / 100%"
 active_in = 'GenshinImpact.exe'
 gpu = 'NVIDIA GeForce RTX 5080'
-multiplier = 2
+ multiplier = 2
+ reserve_multiplier = 1
+ defer_multiplier_change = true
 )";
         ofs.close();
     } catch (const std::filesystem::filesystem_error& e) {
@@ -68,6 +73,8 @@ ConfigFile::ConfigFile() {
             "vkcubepp"
         },
         .multiplier = 4,
+        .reserve_multiplier = 1,
+        .defer_multiplier_change = true,
         .flow_scale = 0.85F,
         .performance_mode = true,
         .pacing = Pacing::None
@@ -78,7 +85,9 @@ ConfigFile::ConfigFile() {
             "GenshinImpact.exe"
         },
         .gpu = "NVIDIA GeForce RTX 5080",
-        .multiplier = 2
+        .multiplier = 2,
+        .reserve_multiplier = 1,
+        .defer_multiplier_change = true
     });
 }
 
@@ -120,11 +129,23 @@ namespace {
     }
     /// parse a game profile configuration
     GameConf parseGameConf(const toml::table& tbl) {
+        const size_t requested_reserve = tbl["reserve_multiplier"].value_or(1U);
+        size_t reserve_multiplier = requested_reserve;
+        if (reserve_multiplier < 1)
+            reserve_multiplier = 1;
+        if (reserve_multiplier > 4)
+            reserve_multiplier = 4;
+        if (reserve_multiplier != requested_reserve)
+            std::cerr << "lsfg-vk: reserve_multiplier adjusted "
+                << requested_reserve << " -> " << reserve_multiplier << '\n';
+        const bool defer_multiplier_change = tbl["defer_multiplier_change"].value_or(true);
         const GameConf conf{
             .name = tbl["name"].value_or<std::string>("unnamed"),
             .active_in = activityFromString(tbl["active_in"]),
             .gpu = tbl["gpu"].value<std::string>(),
             .multiplier = tbl["multiplier"].value_or(2U),
+            .reserve_multiplier = reserve_multiplier,
+            .defer_multiplier_change = defer_multiplier_change,
             .flow_scale = tbl["flow_scale"].value_or(1.0F),
             .performance_mode = tbl["performance_mode"].value_or(false),
             .pacing = pacingFromString(tbl["pacing"].value_or<std::string>("none"))
@@ -164,6 +185,8 @@ namespace {
             .gpu = std::nullopt,
 
             .multiplier = 2,
+            .reserve_multiplier = 1,
+            .defer_multiplier_change = true,
             .flow_scale = 1.0F,
             .performance_mode = false,
             .pacing = Pacing::None
@@ -173,6 +196,12 @@ namespace {
         if (gpu) conf.gpu = std::string(gpu);
         const char* multiplier = std::getenv("LSFGVK_MULTIPLIER");
         if (multiplier) conf.multiplier = static_cast<size_t>(std::stoul(multiplier));
+        const char* reserve_multiplier = std::getenv("LSFGVK_RESERVE_MULTIPLIER");
+        if (reserve_multiplier)
+            conf.reserve_multiplier = static_cast<size_t>(std::stoul(reserve_multiplier));
+        const char* defer_multiplier_change = std::getenv("LSFGVK_DEFER_MULTIPLIER_CHANGE");
+        if (defer_multiplier_change)
+            conf.defer_multiplier_change = std::string(defer_multiplier_change) == "1";
         const char* flow_scale = std::getenv("LSFGVK_FLOW_SCALE");
         if (flow_scale) conf.flow_scale = std::stof(flow_scale);
         const char* performance = std::getenv("LSFGVK_PERFORMANCE_MODE");
@@ -240,6 +269,8 @@ void ConfigFile::write(const std::filesystem::path& path) const {
         if (conf.gpu)
             profile.insert("gpu", conf.gpu.value_or(""));
         profile.insert("multiplier", static_cast<int64_t>(conf.multiplier));
+        profile.insert("reserve_multiplier", static_cast<int64_t>(conf.reserve_multiplier));
+        profile.insert("defer_multiplier_change", conf.defer_multiplier_change);
         profile.insert("flow_scale", conf.flow_scale);
         profile.insert("performance_mode", conf.performance_mode);
         switch (conf.pacing) {

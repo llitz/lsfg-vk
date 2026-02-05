@@ -57,7 +57,8 @@ void layer::context_ModifySwapchainCreateInfo(const ls::GameConf& profile, uint3
 
     switch (profile.pacing) {
         case ls::Pacing::None:
-            createInfo.minImageCount += profile.multiplier;
+            const size_t capacityMultiplier = std::max(profile.multiplier, profile.reserve_multiplier);
+            createInfo.minImageCount += capacityMultiplier;
             if (maxImages && createInfo.minImageCount > maxImages)
                 createInfo.minImageCount = maxImages;
 
@@ -69,7 +70,7 @@ void layer::context_ModifySwapchainCreateInfo(const ls::GameConf& profile, uint3
 Swapchain::Swapchain(const vk::Vulkan& vk, backend::Instance& backend,
             ls::GameConf profile, SwapchainInfo info) :
         instance(backend),
-        creationMultiplier(profile.multiplier),
+        creationMultiplier(std::max(profile.multiplier, profile.reserve_multiplier)),
         profile(std::move(profile)), info(std::move(info)) {
     const VkExtent2D extent = this->info.extent;
     const bool hdr = this->info.format > 57;
