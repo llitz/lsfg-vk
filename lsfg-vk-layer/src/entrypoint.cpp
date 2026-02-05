@@ -13,6 +13,7 @@
 #include <iostream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -38,6 +39,7 @@ namespace {
         std::unordered_map<VkDevice, vk::Vulkan> devices;
         std::unordered_map<VkSwapchainKHR, ls::R<vk::Vulkan>> swapchains;
         std::unordered_map<VkSwapchainKHR, SwapchainInfo> swapchainInfos;
+        std::unordered_set<VkSwapchainKHR> retiredSwapchains;
     }* instance_info; // NOLINT (global variable)
 
     // create instance
@@ -282,18 +284,9 @@ namespace {
             return VK_ERROR_INITIALIZATION_FAILED;
 
         try {
-            // retire old swapchain
-            if (info->oldSwapchain) {
-                const auto& info_mapping = instance_info->swapchainInfos.find(info->oldSwapchain);
-                if (info_mapping != instance_info->swapchainInfos.end())
-                    instance_info->swapchainInfos.erase(info_mapping);
-
-                const auto& mapping = instance_info->swapchains.find(info->oldSwapchain);
-                if (mapping != instance_info->swapchains.end())
-                    instance_info->swapchains.erase(mapping);
-
-                layer_info->root.removeSwapchainContext(info->oldSwapchain);
-            }
+            // mark old swapchain as retired
+            if (info->oldSwapchain)
+                instance_info->retiredSwapchains.emplace(info->oldSwapchain);
 
             layer_info->root.update(); // ensure config is up to date
 
@@ -420,7 +413,13 @@ namespace {
             VkResult swapchainResult = VK_SUCCESS;
             bool skipPresent = false;
 
-            if (multiplierChanged) {
+            if (instance_info->retiredSwapchains.find(swapchain)
+                    != instance_info->retiredSwapchains.end()) {
+                swapchainResult = VK_ERROR_OUT_OF_DATE_KHR;
+                skipPresent = true;
+            }
+
+            if (!skipPresent && multiplierChanged) {
                 auto& context = layer_info->root.getSwapchainContext(swapchain);
                 const auto& currentProfile = *layer_info->root.getActiveProfile();
                 if (context.getCreationMultiplier() != currentProfile.multiplier) {
@@ -485,6 +484,8 @@ namespace {
         const auto& it = instance_info->devices.find(device);
         if (it == instance_info->devices.end())
             return;
+
+        instance_info->retiredSwapchains.erase(swapchain);
 
         const auto& info_mapping = instance_info->swapchainInfos.find(swapchain);
         if (info_mapping != instance_info->swapchainInfos.end())
