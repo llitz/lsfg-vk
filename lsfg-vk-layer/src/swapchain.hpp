@@ -27,6 +27,7 @@ namespace lsfgvk::layer {
         VkColorSpaceKHR colorSpace;
         VkExtent2D extent;
         VkPresentModeKHR presentMode;
+        VkSurfaceKHR surface;
     };
 
     /// modify the swapchain create info based on the profile pre-swapchain creation
@@ -62,6 +63,9 @@ namespace lsfgvk::layer {
         /// get multiplier value at swapchain creation time
         /// @return multiplier used when swapchain was created
         [[nodiscard]] size_t getCreationMultiplier() const { return this->creationMultiplier; }
+        /// get current profile multiplier
+        /// @return multiplier used for frame generation
+        [[nodiscard]] size_t getProfileMultiplier() const { return this->profile.multiplier; }
     private:
         std::vector<vk::Image> sourceImages;
         std::vector<vk::Image> destinationImages;

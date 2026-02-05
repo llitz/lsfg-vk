@@ -41,6 +41,7 @@ namespace {
         std::unordered_map<VkSwapchainKHR, SwapchainInfo> swapchainInfos;
         std::unordered_set<VkSwapchainKHR> retiredSwapchains;
         std::unordered_map<VkSwapchainKHR, size_t> pendingMultiplier;
+        std::unordered_map<VkSwapchainKHR, size_t> loggedDeferredMultiplier;
     }* instance_info; // NOLINT (global variable)
 
     // create instance
@@ -315,19 +316,57 @@ namespace {
             if (res != VK_SUCCESS)
                 throw ls::vulkan_error(res, "vkGetSwapchainImagesKHR() failed");
 
-            auto& info = instance_info->swapchainInfos.emplace(*swapchain, SwapchainInfo {
+            auto& swapchainInfo = instance_info->swapchainInfos.emplace(*swapchain, SwapchainInfo {
                 .images = std::move(swapchainImages),
                 .format = newInfo.imageFormat,
                 .colorSpace = newInfo.imageColorSpace,
                 .extent = newInfo.imageExtent,
-                .presentMode = newInfo.presentMode
+                .presentMode = newInfo.presentMode,
+                .surface = newInfo.surface
             }).first->second;
 
             // create lsfg-vk swapchain
-            layer_info->root.createSwapchainContext(it->second, *swapchain, info);
+            layer_info->root.createSwapchainContext(it->second, *swapchain, swapchainInfo);
 
             instance_info->swapchains.emplace(*swapchain,
                 ls::R<vk::Vulkan>(it->second));
+
+            VkSwapchainKHR replacedSwapchain = info->oldSwapchain;
+            if (!replacedSwapchain) {
+                for (const auto& [sc, scInfo] : instance_info->swapchainInfos) {
+                    if (sc == *swapchain)
+                        continue;
+                    if (scInfo.surface == swapchainInfo.surface) {
+                        replacedSwapchain = sc;
+                        break;
+                    }
+                }
+            }
+
+            if (replacedSwapchain) {
+                auto pendingIt = instance_info->pendingMultiplier.find(replacedSwapchain);
+                if (pendingIt != instance_info->pendingMultiplier.end()) {
+                    auto& context = layer_info->root.getSwapchainContext(*swapchain);
+                    const size_t capacityMultiplier = context.getCreationMultiplier();
+                    const size_t requestedMultiplier = pendingIt->second;
+                    auto loggedIt = instance_info->loggedDeferredMultiplier.find(replacedSwapchain);
+
+                    if (requestedMultiplier <= capacityMultiplier) {
+                        instance_info->pendingMultiplier.erase(pendingIt);
+                        if (loggedIt != instance_info->loggedDeferredMultiplier.end()) {
+                            instance_info->loggedDeferredMultiplier[*swapchain] = loggedIt->second;
+                            instance_info->loggedDeferredMultiplier.erase(loggedIt);
+                        }
+                    } else {
+                        instance_info->pendingMultiplier[*swapchain] = requestedMultiplier;
+                        instance_info->pendingMultiplier.erase(pendingIt);
+                        if (loggedIt != instance_info->loggedDeferredMultiplier.end()) {
+                            instance_info->loggedDeferredMultiplier[*swapchain] = loggedIt->second;
+                            instance_info->loggedDeferredMultiplier.erase(loggedIt);
+                        }
+                    }
+                }
+            }
 
             return res;
         } catch (const ls::vulkan_error& e) {
@@ -384,23 +423,12 @@ namespace {
 
                     if (requestedMultiplier > currentMultiplier) {
                         auto it = instance_info->pendingMultiplier.find(swapchain);
-                        if (it == instance_info->pendingMultiplier.end()
-                                || it->second != requestedMultiplier) {
-                            std::cerr << "lsfg-vk: multiplier change deferred ("
-                                      << currentMultiplier << " -> "
-                                      << requestedMultiplier
-                                      << "), waiting for swapchain recreation\n";
-                        }
                         instance_info->pendingMultiplier[swapchain] = requestedMultiplier;
                         profile.multiplier = currentMultiplier;
                     } else {
                         auto it = instance_info->pendingMultiplier.find(swapchain);
-                        if (it != instance_info->pendingMultiplier.end()) {
-                            std::cerr << "lsfg-vk: multiplier change applied ("
-                                      << it->second << " -> "
-                                      << requestedMultiplier << ")\n";
+                        if (it != instance_info->pendingMultiplier.end())
                             instance_info->pendingMultiplier.erase(it);
-                        }
                         profile.multiplier = requestedMultiplier;
                     }
 
@@ -457,6 +485,33 @@ namespace {
             }
 
             if (!skipPresent) {
+                auto& context = layer_info->root.getSwapchainContext(swapchain);
+                const size_t currentMultiplier = context.getProfileMultiplier();
+                auto pendingIt = instance_info->pendingMultiplier.find(swapchain);
+                if (pendingIt != instance_info->pendingMultiplier.end()) {
+                    auto loggedIt = instance_info->loggedDeferredMultiplier.find(swapchain);
+                    if (loggedIt == instance_info->loggedDeferredMultiplier.end()
+                            || loggedIt->second != pendingIt->second) {
+                        std::cerr << "lsfg-vk: swapchain " << swapchain
+                                  << " multiplier change deferred ("
+                                  << currentMultiplier << " -> "
+                                  << pendingIt->second
+                                  << "), waiting for swapchain recreation\n";
+                        instance_info->loggedDeferredMultiplier[swapchain] = pendingIt->second;
+                    }
+                } else {
+                    auto loggedIt = instance_info->loggedDeferredMultiplier.find(swapchain);
+                    if (loggedIt != instance_info->loggedDeferredMultiplier.end()) {
+                        std::cerr << "lsfg-vk: swapchain " << swapchain
+                                  << " multiplier change applied ("
+                                  << loggedIt->second << " -> "
+                                  << currentMultiplier << ")\n";
+                        instance_info->loggedDeferredMultiplier.erase(loggedIt);
+                    }
+                }
+            }
+
+            if (!skipPresent) {
                 try {
                     std::vector<VkSemaphore> waitSemaphores;
                     waitSemaphores.reserve(info->waitSemaphoreCount);
@@ -485,6 +540,10 @@ namespace {
                 }
             }
 
+            // NOTE: When a multiplier change is deferred, we still present using the
+            // existing swapchain/context but return VK_ERROR_OUT_OF_DATE_KHR to encourage
+            // the application to recreate the swapchain. This is intentional to avoid
+            // freezing while still nudging proper recreation.
             if (deferred && (swapchainResult == VK_SUCCESS
                     || swapchainResult == VK_SUBOPTIMAL_KHR)) {
                 swapchainResult = VK_ERROR_OUT_OF_DATE_KHR;
@@ -517,6 +576,7 @@ namespace {
 
         instance_info->retiredSwapchains.erase(swapchain);
         instance_info->pendingMultiplier.erase(swapchain);
+        instance_info->loggedDeferredMultiplier.erase(swapchain);
 
         const auto& info_mapping = instance_info->swapchainInfos.find(swapchain);
         if (info_mapping != instance_info->swapchainInfos.end())
