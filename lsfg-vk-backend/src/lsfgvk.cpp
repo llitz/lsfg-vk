@@ -592,12 +592,18 @@ void Context::scheduleFrames() {
     this->beta1.render(ctx.vk, cmdbuf);
 
     cmdbuf.end(ctx.vk);
+    VkFence fence = this->destImages.empty() ? this->cmdbufFence.handle() : VK_NULL_HANDLE;
     cmdbuf.submit(this->ctx.vk,
         {}, this->syncSemaphore.handle(), this->idx,
-        {}, this->prepassSemaphore.handle(), this->idx
+        {}, this->prepassSemaphore.handle(), this->idx,
+        fence
     );
 
     this->idx++;
+    if (this->destImages.empty()) {
+        this->fidx++;
+        return;
+    }
 
     // schedule main passes
     for (size_t i = 0; i < this->destImages.size(); i++) {
