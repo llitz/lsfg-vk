@@ -8,11 +8,18 @@
 #include "lsfg-vk-common/vulkan/vulkan.hpp"
 
 #include <cstddef>
+#include <functional>
+#include <iostream>
+#include <string>
+#include <thread>
 #include <vector>
+
+#include <unistd.h>
 
 #include <vulkan/vulkan_core.h>
 
 using namespace lsfgvk::backend;
+
 
 Alpha0::Alpha0(const Ctx& ctx,
         const vk::Image& sourceImage) {

@@ -37,6 +37,8 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <thread>
+#include <unistd.h>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -501,6 +503,7 @@ ContextImpl::ContextImpl(const InstanceImpl& instance,
             this->destImages.at(i)
         );
     }
+
 
     // initialize all images
     std::vector<VkImage> images{};

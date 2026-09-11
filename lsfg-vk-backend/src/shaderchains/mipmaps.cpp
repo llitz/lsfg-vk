@@ -9,8 +9,14 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <iostream>
+#include <string>
+#include <thread>
 #include <utility>
 #include <vector>
+
+#include <unistd.h>
 
 #include <vulkan/vulkan_core.h>
 

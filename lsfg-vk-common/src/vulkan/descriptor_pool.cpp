@@ -7,12 +7,17 @@
 
 #include <array>
 #include <cstdint>
+#include <iostream>
+#include <string>
+#include <thread>
+#include <unistd.h>
 
 #include <vulkan/vulkan_core.h>
 
 using namespace vk;
 
 namespace {
+
     /// create a descriptor pool
     ls::owned_ptr<VkDescriptorPool> createDescriptorPool(const vk::Vulkan& vk,
             const Limits& limits) {

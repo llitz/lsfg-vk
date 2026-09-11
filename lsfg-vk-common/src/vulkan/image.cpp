@@ -6,7 +6,13 @@
 #include "lsfg-vk-common/vulkan/vulkan.hpp"
 
 #include <bitset>
+#include <functional>
+#include <iostream>
 #include <optional>
+#include <string>
+#include <thread>
+
+#include <unistd.h>
 
 #include <vulkan/vulkan_core.h>
 

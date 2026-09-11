@@ -8,11 +8,16 @@
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <ios>
+#include <iostream>
 #include <optional>
 #include <string>
+#include <thread>
+#include <unistd.h>
 #include <vector>
 
 #include <dlfcn.h>
@@ -434,7 +439,7 @@ Vulkan::Vulkan(const std::string& appName, version appVersion,
         *this->device, cachefile
     )),
     cachefile(cachefile) {
-}
+    }
 
 Vulkan::Vulkan(VkInstance instance, VkDevice device,
         VkPhysicalDevice physdev,

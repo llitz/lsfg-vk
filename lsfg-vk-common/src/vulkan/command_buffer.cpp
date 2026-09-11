@@ -11,7 +11,10 @@
 #include "lsfg-vk-common/vulkan/vulkan.hpp"
 
 #include <cstdint>
+#include <iostream>
 #include <optional>
+#include <thread>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -256,6 +259,6 @@ void CommandBuffer::submit(const vk::Vulkan& vk) const {
     if (res != VK_SUCCESS)
         throw ls::vulkan_error(res, "vkQueueSubmit() failed");
 
-    if (!fence.wait(vk))
+    if (!fence.wait(vk, 10ULL * 1000 * 1000 * 1000))
         throw ls::vulkan_error(VK_TIMEOUT, "Fence::wait() timed out");
 }

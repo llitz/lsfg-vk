@@ -12,13 +12,20 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <iostream>
+#include <string>
+#include <thread>
 #include <vector>
+
+#include <unistd.h>
 
 #include <vulkan/vulkan_core.h>
 
 using namespace vk;
 
 namespace {
+
     /// create a descriptor set
     ls::owned_ptr<VkDescriptorSet> createDescriptorSet(const vk::Vulkan& vk,
             const vk::DescriptorPool& pool, const vk::Shader& shader) {

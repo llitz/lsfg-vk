@@ -2,6 +2,7 @@
 
 #include "utils.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -26,8 +27,8 @@ ConstantBuffer backend::getDefaultConstantBuffer(
 
 VkExtent2D backend::shift_extent(VkExtent2D extent, uint32_t i) {
     return VkExtent2D{
-        .width = extent.width >> i,
-        .height = extent.height >> i
+        .width = std::max<uint32_t>(1, extent.width >> i),
+        .height = std::max<uint32_t>(1, extent.height >> i)
     };
 }
 

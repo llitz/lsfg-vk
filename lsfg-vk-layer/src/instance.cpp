@@ -42,6 +42,7 @@ namespace {
 
         return extensions;
     }
+
 }
 
 Root::Root() {
@@ -87,6 +88,18 @@ void Root::modifyInstanceCreateInfo(VkInstanceCreateInfo& createInfo,
     if (!this->active_profile.has_value())
         return;
 
+
+    // Only inject into instances that will present (request a WSI surface
+    // extension). Non-presenting instances (e.g. CEF/ANGLE's GPU-probe instance)
+    // must not receive external-memory capability extensions: under Proton 11
+    // (winevulkan 11.x) those make ANGLE probe VK_EXT_external_memory_dma_buf,
+    // which is hidden there, and the bad probe result aborts CEF via a CHECK.
+    if (!requests_wsi_surface(createInfo.ppEnabledExtensionNames,
+            createInfo.enabledExtensionCount)) {
+        finish();
+        return;
+    }
+
     auto extensions = add_extensions(
         createInfo.ppEnabledExtensionNames,
         createInfo.enabledExtensionCount,
@@ -106,6 +119,12 @@ void Root::modifyDeviceCreateInfo(VkDeviceCreateInfo& createInfo,
         const std::function<void(void)>& finish) const {
     if (!this->active_profile.has_value())
         return;
+
+
+    if (std::getenv("LSFGVK_NO_INJECT")) {
+        finish();
+        return;
+    }
 
     auto extensions = add_extensions(
         createInfo.ppEnabledExtensionNames,

@@ -9,8 +9,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
+#include <fstream>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -22,11 +25,27 @@
 
 using namespace lsfgvk::layer;
 
+    // redirect the layer's std::cerr to a file when LSFGVK_LOG_FILE is set,
+    // so diagnostics can be captured regardless of how the game is launched
+    // (e.g. Lutris, where the game's stderr is not visible). Wine's WINEDEBUG
+    // writes fd 2 directly and is unaffected.
+    void init_file_logging() {
+        const char* path = std::getenv("LSFGVK_LOG_FILE");
+        if (!path)
+            return;
+        static std::ofstream ofs(path, std::ios::app);
+        if (ofs)
+            std::cerr.rdbuf(ofs.rdbuf());
+    }
+
 namespace {
     // global layer info initialized at layer negotiation
     struct LayerInfo {
         std::unordered_map<std::string, PFN_vkVoidFunction> map; //!< function pointer override map
         PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
+        std::unordered_map<VkInstance, PFN_vkGetInstanceProcAddr> instanceGipa; //!< per-instance next GIPA
+        PFN_GetPhysicalDeviceProcAddr nextGetPhysicalDeviceProcAddr;
+        std::mutex mutex; //!< guards instanceGipa + nextGetPhysicalDeviceProcAddr
 
         Root root;
     }* layer_info; // NOLINT (global variable)
@@ -35,6 +54,8 @@ namespace {
     struct InstanceInfo {
         std::vector<VkInstance> handles; // there may be several instances
         vk::VulkanInstanceFuncs funcs;
+        std::unordered_map<VkDevice, PFN_vkGetDeviceProcAddr> deviceGdpa; //!< per-device next GDPA
+        std::mutex mutex; //!< guards deviceGdpa, devices, handles
 
         std::unordered_map<VkDevice, vk::Vulkan> devices;
         std::unordered_map<VkSwapchainKHR, ls::R<vk::Vulkan>> swapchains;
@@ -43,6 +64,7 @@ namespace {
         std::unordered_map<VkSwapchainKHR, size_t> pendingMultiplier;
         std::unordered_map<VkSwapchainKHR, size_t> loggedDeferredMultiplier;
     }* instance_info; // NOLINT (global variable)
+    std::mutex instance_info_mutex; //!< guards instance_info creation/destruction
 
     // create instance
     VkResult myvkCreateInstance(
@@ -78,6 +100,9 @@ namespace {
         layerInfo->u.pLayerInfo = linkInfo->pNext; // advance for next layer
 
         // create instance
+        const bool wsi = requests_wsi_surface(info->ppEnabledExtensionNames,
+            info->enabledExtensionCount);
+
         auto* vkCreateInstance = reinterpret_cast<PFN_vkCreateInstance>(
             layer_info->GetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateInstance"));
         if (!vkCreateInstance) {
@@ -87,6 +112,15 @@ namespace {
         }
 
         try {
+            if (!wsi) {
+                // non-WSI instance (e.g. CEF/ANGLE GPU probe): pure passthrough,
+                // no tracking, no injection
+                auto res = vkCreateInstance(info, alloc, instance);
+                if (res != VK_SUCCESS)
+                    throw ls::vulkan_error(res, "vkCreateInstance() failed");
+                return VK_SUCCESS;
+            }
+
             VkInstanceCreateInfo newInfo = *info;
             layer_info->root.modifyInstanceCreateInfo(newInfo,
                 [=, newInfo = &newInfo]() {
@@ -96,13 +130,24 @@ namespace {
                 }
             );
 
-            if (!instance_info)
-                instance_info = new InstanceInfo{ // NOLINT (memory management)
-                    .funcs = vk::initVulkanInstanceFuncs(*instance,
-                        layer_info->GetInstanceProcAddr, true),
-                };
+            {
+                std::lock_guard<std::mutex> lock(layer_info->mutex);
+                layer_info->instanceGipa[*instance] = linkInfo->pfnNextGetInstanceProcAddr;
+            }
 
-            instance_info->handles.push_back(*instance);
+            if (!instance_info) {
+                std::lock_guard<std::mutex> lock(instance_info_mutex);
+                if (!instance_info)
+                    instance_info = new InstanceInfo{ // NOLINT (memory management)
+                        .funcs = vk::initVulkanInstanceFuncs(*instance,
+                            linkInfo->pfnNextGetInstanceProcAddr, true),
+                    };
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(instance_info->mutex);
+                instance_info->handles.push_back(*instance);
+            }
 
             return VK_SUCCESS;
         } catch (const ls::vulkan_error& e) {
@@ -174,6 +219,11 @@ namespace {
                         throw ls::vulkan_error(res, "vkCreateDevice() failed");
                 }
             );
+
+            {
+                std::lock_guard<std::mutex> lock(instance_info->mutex);
+                instance_info->deviceGdpa[*device] = linkInfo->pfnNextGetDeviceProcAddr;
+            }
         } catch (const ls::vulkan_error& e) {
             if (e.error() == VK_ERROR_EXTENSION_NOT_PRESENT)
                 std::cerr << "lsfg-vk: required Vulkan device extensions are not present. "
@@ -202,14 +252,28 @@ namespace {
 
     // destroy device
     void myvkDestroyDevice(VkDevice device, const VkAllocationCallbacks* alloc) {
-        // destroy layer instance
-        auto it = instance_info->devices.find(device);
-        if (it != instance_info->devices.end())
-            instance_info->devices.erase(it);
+        PFN_vkGetDeviceProcAddr nextGdpa{};
+        {
+            std::lock_guard<std::mutex> lock(instance_info->mutex);
+            auto it = instance_info->deviceGdpa.find(device);
+            if (it != instance_info->deviceGdpa.end()) {
+                nextGdpa = it->second;
+                instance_info->deviceGdpa.erase(it);
+            }
+
+            auto dit = instance_info->devices.find(device);
+            if (dit != instance_info->devices.end())
+                instance_info->devices.erase(dit);
+        }
 
         // destroy device
-        auto vkDestroyDevice = reinterpret_cast<PFN_vkDestroyDevice>(
-            instance_info->funcs.GetDeviceProcAddr(device, "vkDestroyDevice"));
+        PFN_vkDestroyDevice vkDestroyDevice{};
+        if (nextGdpa)
+            vkDestroyDevice = reinterpret_cast<PFN_vkDestroyDevice>(
+                nextGdpa(device, "vkDestroyDevice"));
+        else
+            vkDestroyDevice = reinterpret_cast<PFN_vkDestroyDevice>(
+                instance_info->funcs.GetDeviceProcAddr(device, "vkDestroyDevice"));
         if (!vkDestroyDevice) {
             std::cerr << "lsfg-vk: failed to get next layer's vkDestroyDevice, "
                 "the previous layer does not follow spec\n";
@@ -221,20 +285,33 @@ namespace {
 
     // destroy instance
     void myvkDestroyInstance(VkInstance instance, const VkAllocationCallbacks* alloc) {
-        // remove instance handle
-        auto it = std::ranges::find(instance_info->handles, instance);
-        if (it != instance_info->handles.end())
-            instance_info->handles.erase(it);
+        PFN_vkGetInstanceProcAddr nextGipa{};
+        {
+            std::lock_guard<std::mutex> lock(layer_info->mutex);
+            auto git = layer_info->instanceGipa.find(instance);
+            if (git != layer_info->instanceGipa.end()) {
+                nextGipa = git->second;
+                layer_info->instanceGipa.erase(git);
+            }
+        }
 
-        // destroy instance info if no handles remain
-        if (instance_info->handles.empty()) {
-            delete instance_info; // NOLINT (memory management)
-            instance_info = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(instance_info->mutex);
+            // remove instance handle
+            auto it = std::ranges::find(instance_info->handles, instance);
+            if (it != instance_info->handles.end())
+                instance_info->handles.erase(it);
+
+            // destroy instance info if no handles remain
+            if (instance_info->handles.empty()) {
+                delete instance_info; // NOLINT (memory management)
+                instance_info = nullptr;
+            }
         }
 
         // destroy instance
         auto vkDestroyInstance = reinterpret_cast<PFN_vkDestroyInstance>(
-            layer_info->GetInstanceProcAddr(instance, "vkDestroyInstance"));
+            (nextGipa ? nextGipa : layer_info->GetInstanceProcAddr)(instance, "vkDestroyInstance"));
         if (!vkDestroyInstance) {
             std::cerr << "lsfg-vk: failed to get next layer's vkDestroyInstance, "
                 "the previous layer does not follow spec\n";
@@ -252,6 +329,31 @@ namespace {
         return nullptr;
     }
 
+    // get physical-device-level function pointers
+    // loader v2 passes the physical device handle in the VkInstance-typed slot
+    PFN_vkVoidFunction myvkGetPhysicalDeviceProcAddr(VkInstance instance, const char* name) {
+        if (!name) return nullptr;
+
+        auto func = getProcAddr(name);
+        if (func) return func;
+
+        if (!layer_info->nextGetPhysicalDeviceProcAddr) { // resolve lazily, once
+            std::lock_guard<std::mutex> lock(layer_info->mutex);
+            if (!layer_info->nextGetPhysicalDeviceProcAddr) {
+                auto p = layer_info->GetInstanceProcAddr(VK_NULL_HANDLE, "vkGetPhysicalDeviceProcAddr");
+                layer_info->nextGetPhysicalDeviceProcAddr =
+                    reinterpret_cast<PFN_GetPhysicalDeviceProcAddr>(p);
+            }
+        }
+
+        PFN_vkVoidFunction pfn = nullptr;
+        if (layer_info->nextGetPhysicalDeviceProcAddr)
+            pfn = layer_info->nextGetPhysicalDeviceProcAddr(instance, name);
+        if (!pfn && layer_info->GetInstanceProcAddr)
+            pfn = layer_info->GetInstanceProcAddr(VK_NULL_HANDLE, name); // host loader resolves physdev fns via GIPA
+        return pfn;
+    }
+
     // get instance-level function pointers
     PFN_vkVoidFunction myvkGetInstanceProcAddr(VkInstance instance, const char* name) {
         if (!name) return nullptr;
@@ -259,8 +361,17 @@ namespace {
         auto func = getProcAddr(name);
         if (func) return func;
 
-        if (!layer_info->GetInstanceProcAddr) return nullptr;
-        return layer_info->GetInstanceProcAddr(instance, name);
+        PFN_vkGetInstanceProcAddr gipa = layer_info->GetInstanceProcAddr;
+        {
+            std::lock_guard<std::mutex> lock(layer_info->mutex);
+            auto it = layer_info->instanceGipa.find(instance);
+            if (it != layer_info->instanceGipa.end())
+                gipa = it->second;
+        }
+        if (!gipa) return nullptr;
+
+        auto result = gipa(instance, name);
+        return result;
     }
 
     // get device-level function pointers
@@ -270,8 +381,19 @@ namespace {
         auto func = getProcAddr(name);
         if (func) return func;
 
-        if (!instance_info->funcs.GetDeviceProcAddr) return nullptr;
-        return instance_info->funcs.GetDeviceProcAddr(device, name);
+        PFN_vkGetDeviceProcAddr gdpa{};
+        {
+            std::lock_guard<std::mutex> lock(instance_info->mutex);
+            auto it = instance_info->deviceGdpa.find(device);
+            if (it != instance_info->deviceGdpa.end())
+                gdpa = it->second;
+        }
+        if (!gdpa)
+            gdpa = instance_info->funcs.GetDeviceProcAddr;
+        if (!gdpa) return nullptr;
+
+        auto result = gdpa(device, name);
+        return result;
     }
 }
 
@@ -284,6 +406,12 @@ namespace {
         const auto& it = instance_info->devices.find(device);
         if (it == instance_info->devices.end())
             return VK_ERROR_INITIALIZATION_FAILED;
+
+        if (std::getenv("LSFGVK_NO_FG")) {
+            // true pass-through: no swapchain modification, no tracking
+            auto res = it->second.df().CreateSwapchainKHR(device, info, alloc, swapchain);
+            return res;
+        }
 
         try {
             // mark old swapchain as retired
@@ -326,6 +454,26 @@ namespace {
             }).first->second;
 
             // create lsfg-vk swapchain
+            if (std::getenv("LSFGVK_NO_FG")) {
+                return VK_SUCCESS; // leave the swapchain UNTRACKED
+            }
+
+            // Degenerate / probe swapchains: frame generation on a near-zero
+            // extent is meaningless AND crashes the driver. The 7-level mipmap
+            // pyramid (deepest = extent >> 6) needs extent >= 64 to stay
+            // non-zero; RADV NULL-derefs in vkBindImageMemory on a 0x0 image.
+            // Games create a 1x1 probe swapchain before the real one — pass
+            // those through (untracked) so the real swapchain can engage FG.
+            {
+                const uint32_t minDim = 64;
+                if (newInfo.imageExtent.width < minDim || newInfo.imageExtent.height < minDim) {
+                    std::cerr << "lsfg-vk: swapchain extent "
+                              << newInfo.imageExtent.width << "x" << newInfo.imageExtent.height
+                              << " < " << minDim << "x" << minDim
+                              << ", skipping FG context (present will forward to driver)\n";
+                    return VK_SUCCESS; // leave the swapchain UNTRACKED
+                }
+            }
             layer_info->root.createSwapchainContext(it->second, *swapchain, swapchainInfo);
 
             instance_info->swapchains.emplace(*swapchain,
@@ -477,8 +625,23 @@ namespace {
             const auto& swapchain = info->pSwapchains[i];
 
             const auto& it = instance_info->swapchains.find(swapchain);
-            if (it == instance_info->swapchains.end())
-                return VK_ERROR_INITIALIZATION_FAILED;
+            if (it == instance_info->swapchains.end()) {
+                // untracked swapchain (e.g. LSFGVK_NO_FG): forward to driver
+                const vk::Vulkan* dev = nullptr;
+                {
+                    std::lock_guard<std::mutex> lock(instance_info->mutex);
+                    if (!instance_info->devices.empty())
+                        dev = &instance_info->devices.begin()->second;
+                }
+                if (!dev)
+                    return VK_ERROR_INITIALIZATION_FAILED;
+
+                VkResult res = dev->df().QueuePresentKHR(
+                    queue, const_cast<VkPresentInfoKHR*>(info));
+                if (info->pResults)
+                    info->pResults[i] = res;
+                return res;
+            }
 
             VkResult swapchainResult = VK_SUCCESS;
             bool skipPresent = false;
@@ -590,6 +753,12 @@ namespace {
         if (it == instance_info->devices.end())
             return;
 
+        // untracked swapchain (e.g. LSFGVK_NO_FG): forward to driver
+        if (instance_info->swapchains.find(swapchain) == instance_info->swapchains.end()) {
+            it->second.df().DestroySwapchainKHR(device, swapchain, alloc);
+            return;
+        }
+
         instance_info->retiredSwapchains.erase(swapchain);
         instance_info->pendingMultiplier.erase(swapchain);
         instance_info->loggedDeferredMultiplier.erase(swapchain);
@@ -612,6 +781,7 @@ namespace {
 /// Vulkan layer entrypoint
 __attribute__((visibility("default")))
 VkResult vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface* pVersionStruct) {
+    init_file_logging();
     // ensure loader compatibility
     if (!pVersionStruct
         || pVersionStruct->sType != LAYER_NEGOTIATE_INTERFACE_STRUCT

@@ -4,12 +4,19 @@
 #include "lsfg-vk-common/helpers/errors.hpp"
 #include "lsfg-vk-common/helpers/pointers.hpp"
 #include "lsfg-vk-common/vulkan/vulkan.hpp"
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <string>
+#include <thread>
+#include <unistd.h>
 
 #include <vulkan/vulkan_core.h>
 
 using namespace vk;
 
 namespace {
+
     /// create a sampler
     ls::owned_ptr<VkSampler> createSampler(const vk::Vulkan& vk,
             VkSamplerAddressMode mode, VkCompareOp compare, bool white) {

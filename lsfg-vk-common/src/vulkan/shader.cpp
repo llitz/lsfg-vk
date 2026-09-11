@@ -7,6 +7,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
+#include <string>
+#include <thread>
+#include <unistd.h>
 #include <vector>
 
 #include <vulkan/vulkan_core.h>
